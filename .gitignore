@@ -1,3 +1,39 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# SPIRV Output
+*.spv
+
 CMakeLists.txt.user
 CMakeCache.txt
 CMakeFiles
@@ -11,9 +47,87 @@ CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
 
-# CLion
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#cmake-build-*
+.vs/
+.vscode/
+.idea/
+vcpkg_installed/
+
+RTR_ENGINE.log
+
+build/
+build-debug/
+build-release/
+build-shared/
+build-shared-debug/
+build-shared-release/
+build-llvm/
+build-llvm-debug/
+build-llvm-release/
+build-llvm-shared/
+build-llvm-shared-debug/
+build-llvm-shared-release/
+build-gnu/
+build-gnu-debug/
+build-gnu-release/
+build-gnu-shared/
+build-gnu-shared-debug/
+build-gnu-shared-release/
+
+Build/
+Build-Debug/
+Build-Release/
+Build-Shared/
+Build-Shared-Debug/
+Build-Shared-Release/
+Build-LLVM/
+Build-LLVM-Debug/
+Build-LLVM-Release/
+Build-LLVM-Shared/
+Build-LLVM-Shared-Debug/
+Build-LLVM-Shared-Release/
+Build-Gnu/
+Build-Gnu-Debug/
+Build-Gnu-Release/
+Build-Gnu-Shared/
+Build-Gnu-Shared-Debug/
+Build-Gnu-Shared-Release/
+
+cmake-build/
+cmake-build-debug/
+cmake-build-release/
+cmake-build-shared/
+cmake-build-shared-debug/
+cmake-build-shared-release/
+cmake-build-llvm/
+cmake-build-llvm-debug/
+cmake-build-llvm-release/
+cmake-build-llvm-shared/
+cmake-build-llvm-shared-debug/
+cmake-build-llvm-shared-release/
+cmake-build-gnu/
+cmake-build-gnu-debug/
+cmake-build-gnu-release/
+cmake-build-gnu-shared/
+cmake-build-gnu-shared-debug/
+cmake-build-gnu-shared-release/
+
+CMake-Build/
+CMake-Build-Debug/
+CMake-Build-Release/
+CMake-Build-Shared/
+CMake-Build-Shared-Debug/
+CMake-Build-Shared-Release/
+CMake-Build-LLVM/
+CMake-Build-LLVM-Debug/
+CMake-Build-LLVM-Release/
+CMake-Build-LLVM-Shared/
+CMake-Build-LLVM-Shared-Debug/
+CMake-Build-LLVM-Shared-Release/
+CMake-Build-Gnu/
+CMake-Build-Gnu-Debug/
+CMake-Build-Gnu-Release/
+CMake-Build-Gnu-Shared/
+CMake-Build-Gnu-Shared-Debug/
+CMake-Build-Gnu-Shared-Release/
+
+imgui.ini

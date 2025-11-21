@@ -1,0 +1,7 @@
+#pragma once
+
+#include <Ignis/Core/Defines.hpp>
+#include <Ignis/Core/PCH.hpp>
+#include <Ignis/Core/Logger.hpp>
+#include <Ignis/Core/Timer.hpp>
+#include <Ignis/Core/Singleton.hpp>

@@ -1,0 +1,48 @@
+#pragma once
+
+#include <Ignis/Core/Defines.hpp>
+
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <cstdio>
+#include <cstdarg>
+
+#include <span>
+#include <queue>
+#include <deque>
+#include <tuple>
+#include <mutex>
+#include <array>
+#include <vector>
+#include <string>
+#include <ranges>
+#include <random>
+#include <format>
+#include <chrono>
+#include <atomic>
+#include <thread>
+#include <memory>
+#include <fstream>
+#include <variant>
+#include <utility>
+#include <optional>
+#include <algorithm>
+#include <execution>
+#include <typeinfo>
+#include <typeindex>
+#include <filesystem>
+#include <type_traits>
+#include <condition_variable>
+
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/sink.h>
+
+#include <gtl/phmap.hpp>
+
+#include <vulkan/vulkan.hpp>
+#include <vulkan/vk_enum_string_helper.h>
+
+#include <vk_mem_alloc.hpp>
+
+#include <GLFW/glfw3.h>

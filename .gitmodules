@@ -1,0 +1,13 @@
+[submodule "Modules/ThirdParty/vkfw"]
+	path = Modules/ThirdParty/vkfw
+	url = git@github.com:Cvelth/vkfw.git
+[submodule "Modules/ThirdParty/VulkanMemoryAllocator"]
+	path = Modules/ThirdParty/VulkanMemoryAllocator
+	url = git@github.com:GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+[submodule "Modules/ThirdParty/VulkanMemoryAllocator-Hpp"]
+	path = Modules/ThirdParty/VulkanMemoryAllocator-Hpp
+	url = git@github.com:YaaZ/VulkanMemoryAllocator-Hpp.git
+[submodule "Modules/ThirdParty/imgui"]
+	path = Modules/ThirdParty/imgui
+	url = git@github.com:ocornut/imgui.git
+	branch = docking

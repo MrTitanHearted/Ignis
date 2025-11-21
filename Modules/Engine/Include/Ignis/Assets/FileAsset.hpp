@@ -1,0 +1,24 @@
+#pragma once
+
+#include <Ignis/Core.hpp>
+
+namespace Ignis {
+    class FileAsset {
+       public:
+        static std::optional<FileAsset> TextFromPath(const std::filesystem::path &path);
+        static std::optional<FileAsset> BinaryFromPath(const std::filesystem::path &path);
+
+        static FileAsset FromContent(const std::filesystem::path &path, std::string_view content);
+
+       public:
+        FileAsset()  = default;
+        ~FileAsset() = default;
+
+        std::filesystem::path getPath() const;
+        std::string_view      getContent() const;
+
+       private:
+        std::filesystem::path m_Path;
+        std::string           m_Content;
+    };
+}  // namespace Ignis

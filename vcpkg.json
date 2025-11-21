@@ -1,0 +1,16 @@
+{
+    "name": "ignis",
+    "version": "0.0.1",
+    "dependencies": [
+        "glfw3",
+        "glm",
+        "stb",
+        "fastgltf",
+        "spdlog",
+        "function2",
+        "concurrentqueue",
+        "gtl",
+        "taskflow",
+        "shader-slang"
+    ]
+}

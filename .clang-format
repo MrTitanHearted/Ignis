@@ -1,0 +1,21 @@
+BasedOnStyle: Google
+IndentWidth: 4
+TabWidth: 4
+IndentCaseLabels: true
+ColumnLimit: 0
+NamespaceIndentation: All
+FixNamespaceComments: true
+SortIncludes: Never
+PointerAlignment: Right
+ReferenceAlignment: Right
+AlignConsecutiveAssignments:
+    Enabled: true
+    AcrossEmptyLines: false
+    AcrossComments: false
+AlignConsecutiveDeclarations:
+    Enabled: true
+    AcrossEmptyLines: false
+    AcrossComments: false
+AlignTrailingComments: true
+IndentPPDirectives: BeforeHash
+SeparateDefinitionBlocks: Always
