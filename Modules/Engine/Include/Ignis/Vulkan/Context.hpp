@@ -92,13 +92,14 @@ namespace Ignis::Vulkan {
         vk::Queue  m_ComputeQueue;
         vk::Queue  m_PresentQueue;
 
-        uint32_t             m_SwapchainImageCount;
+        uint32_t             m_SwapchainMinImageCount;
         vk::SurfaceFormatKHR m_SwapchainFormat;
         vk::PresentModeKHR   m_SwapchainPresentMode;
 
         vk::SwapchainKHR    m_Swapchain;
         vk::Extent2D        m_SwapchainExtent;
         vk::ImageUsageFlags m_SwapchainUsageFlags;
+        uint32_t            m_SwapchainImageCount;
 
         std::vector<vk::Image>     m_SwapchainImages;
         std::vector<vk::ImageView> m_SwapchainImageViews;

@@ -68,5 +68,49 @@ namespace Ignis::Vulkan {
             return vk::CommandBufferSubmitInfo{}
                 .setCommandBuffer(buffer);
         }
+
+        void CopyImageToImage(
+            const vk::Image         src_image,
+            const vk::Image         dst_image,
+            const vk::Extent3D     &src_extent,
+            const vk::Extent3D     &dst_extent,
+            const vk::CommandBuffer command_buffer) {
+            vk::ImageBlit2 blit_region{};
+            blit_region
+                .setSrcOffsets({vk::Offset3D{0, 0, 0},
+                                vk::Offset3D{
+                                    static_cast<int32_t>(src_extent.width),
+                                    static_cast<int32_t>(src_extent.height),
+                                    static_cast<int32_t>(src_extent.depth),
+                                }})
+                .setDstOffsets({vk::Offset3D{0, 0, 0},
+                                vk::Offset3D{
+                                    static_cast<int32_t>(dst_extent.width),
+                                    static_cast<int32_t>(dst_extent.height),
+                                    static_cast<int32_t>(dst_extent.depth),
+                                }})
+                .setSrcSubresource(
+                    vk::ImageSubresourceLayers{}
+                        .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                        .setBaseArrayLayer(0)
+                        .setLayerCount(1)
+                        .setMipLevel(0))
+                .setDstSubresource(vk::ImageSubresourceLayers{}
+                                       .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                                       .setBaseArrayLayer(0)
+                                       .setLayerCount(1)
+                                       .setMipLevel(0));
+
+            vk::BlitImageInfo2 blit_info{};
+            blit_info
+                .setSrcImage(src_image)
+                .setSrcImageLayout(vk::ImageLayout::eTransferSrcOptimal)
+                .setDstImage(dst_image)
+                .setDstImageLayout(vk::ImageLayout::eTransferDstOptimal)
+                .setFilter(vk::Filter::eLinear)
+                .setRegions({blit_region});
+
+            command_buffer.blitImage2(blit_info);
+        }
     }  // namespace CommandBuffer
 }  // namespace Ignis::Vulkan

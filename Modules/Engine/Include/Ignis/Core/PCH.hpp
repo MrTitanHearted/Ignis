@@ -35,6 +35,8 @@
 #include <type_traits>
 #include <condition_variable>
 
+#include <function2/function2.hpp>
+
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/sink.h>
 
@@ -46,3 +48,7 @@
 #include <vk_mem_alloc.hpp>
 
 #include <GLFW/glfw3.h>
+
+#include <imgui.h>
+#include <backends/imgui_impl_glfw.h>
+#include <backends/imgui_impl_vulkan.h>

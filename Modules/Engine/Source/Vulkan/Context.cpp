@@ -133,6 +133,16 @@ namespace Ignis::Vulkan {
         vulkan12_features
             .setBufferDeviceAddress(vk::True)
             .setDescriptorIndexing(vk::True)
+            .setDescriptorBindingPartiallyBound(vk::True)
+            .setDescriptorBindingSampledImageUpdateAfterBind(vk::True)
+            .setDescriptorBindingStorageBufferUpdateAfterBind(vk::True)
+            .setDescriptorBindingStorageImageUpdateAfterBind(vk::True)
+            .setDescriptorBindingStorageTexelBufferUpdateAfterBind(vk::True)
+            .setDescriptorBindingUniformBufferUpdateAfterBind(vk::True)
+            .setDescriptorBindingUniformTexelBufferUpdateAfterBind(vk::True)
+            .setDescriptorBindingUpdateUnusedWhilePending(vk::True)
+            .setDescriptorBindingVariableDescriptorCount(vk::True)
+            .setRuntimeDescriptorArray(vk::True)
             .setTimelineSemaphore(vk::True)
             .setPNext(&vulkan13_features);
         features.setPNext(&vulkan12_features);
@@ -196,6 +206,8 @@ namespace Ignis::Vulkan {
 
         DestroySwapchain();
 
+        s_pInstance->m_VmaAllocator.destroy();
+
         s_pInstance->m_Device.destroy();
 
         s_pInstance->m_Instance.destroySurfaceKHR(s_pInstance->m_Surface);
@@ -211,6 +223,7 @@ namespace Ignis::Vulkan {
 
     void Context::ResizeSwapchain(const uint32_t width, const uint32_t height) {
         DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Vulkan::Context is not initialized");
+        DestroySwapchain();
         CreateSwapchain(width, height);
     }
 
@@ -321,12 +334,6 @@ namespace Ignis::Vulkan {
         s_pInstance->m_SwapchainExtent.width  = width;
         s_pInstance->m_SwapchainExtent.height = height;
 
-        const vk::SwapchainKHR old_swapchain = s_pInstance->m_Swapchain;
-
-        for (const vk::ImageView &view : s_pInstance->m_SwapchainImageViews) {
-            s_pInstance->m_Device.destroyImageView(view);
-        }
-
         s_pInstance->m_SwapchainImageViews.clear();
         s_pInstance->m_SwapchainImages.clear();
 
@@ -334,7 +341,7 @@ namespace Ignis::Vulkan {
             vk::SwapchainCreateInfoKHR swapchain_create_info{};
             swapchain_create_info
                 .setSurface(s_pInstance->m_Surface)
-                .setMinImageCount(s_pInstance->m_SwapchainImageCount)
+                .setMinImageCount(s_pInstance->m_SwapchainMinImageCount)
                 .setImageFormat(s_pInstance->m_SwapchainFormat.format)
                 .setImageColorSpace(s_pInstance->m_SwapchainFormat.colorSpace)
                 .setImageExtent(s_pInstance->m_SwapchainExtent)
@@ -345,8 +352,7 @@ namespace Ignis::Vulkan {
                 .setPreTransform(surface_capabilities.currentTransform)
                 .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque)
                 .setPresentMode(s_pInstance->m_SwapchainPresentMode)
-                .setClipped(vk::True)
-                .setOldSwapchain(old_swapchain);
+                .setClipped(vk::True);
             auto [result, swapchain] = s_pInstance->m_Device.createSwapchainKHR(swapchain_create_info);
             IGNIS_VK_CHECK(result);
             s_pInstance->m_Swapchain = swapchain;
@@ -382,10 +388,6 @@ namespace Ignis::Vulkan {
             auto [result, view] = s_pInstance->m_Device.createImageView(image_view_create_info);
             IGNIS_VK_CHECK(result);
             s_pInstance->m_SwapchainImageViews.push_back(view);
-        }
-
-        if (VK_NULL_HANDLE != old_swapchain) {
-            s_pInstance->m_Device.destroySwapchainKHR(old_swapchain);
         }
     }
 
@@ -554,7 +556,7 @@ namespace Ignis::Vulkan {
             image_count = surface_capabilities.maxImageCount;
         }
 
-        s_pInstance->m_SwapchainImageCount = image_count;
+        s_pInstance->m_SwapchainMinImageCount = image_count;
     }
 
     void Context::SelectSwapchainFormat(const std::span<const vk::Format> preferred_formats) {
@@ -633,6 +635,7 @@ namespace Ignis::Vulkan {
                vulkan13_features.synchronization2 == vk::True &&
                vulkan12_features.timelineSemaphore == vk::True &&
                vulkan12_features.bufferDeviceAddress == vk::True &&
+               vulkan12_features.runtimeDescriptorArray == vk::True &&
                vulkan12_features.descriptorIndexing == vk::True;
     }
 
@@ -670,7 +673,7 @@ namespace Ignis::Vulkan {
         const VkDebugUtilsMessengerCallbackDataEXT  *p_callback_data,
         void                                        *p_userdata) {
         switch (severity) {
-            case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT: {
+            case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT: {  // NOLINT(*-branch-clone)
                 // IGNIS_LOG_ENGINE_TRACE(
                 //     "[Vulkan Validation Layers]: {} - {}: {}",
                 //     p_callback_data->messageIdNumber,

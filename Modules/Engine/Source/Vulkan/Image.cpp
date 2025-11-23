@@ -6,10 +6,6 @@ namespace Ignis::Vulkan {
             switch (layout) {
                 case vk::ImageLayout::eUndefined:
                     return vk::ImageAspectFlagBits::eNone;
-                case vk::ImageLayout::eGeneral:
-                    return vk::ImageAspectFlagBits::eColor |
-                           vk::ImageAspectFlagBits::eDepth |
-                           vk::ImageAspectFlagBits::eStencil;
                 case vk::ImageLayout::eColorAttachmentOptimal:
                     return vk::ImageAspectFlagBits::eColor;
                 case vk::ImageLayout::eDepthStencilAttachmentOptimal:
@@ -61,7 +57,189 @@ namespace Ignis::Vulkan {
             const vk::CommandBuffer command_buffer) {
             TransitionLayout(image, vk::ImageLayout::eUndefined, new_layout, command_buffer);
         }
+
+        void Destroy(const Allocation &allocation, const vma::Allocator allocator) {
+            allocator.destroyImage(allocation.Image, allocation.VmaAllocation);
+        }
+
+        Allocation Allocate(
+            const vma::AllocationCreateFlags allocation_flags,
+            const vk::MemoryPropertyFlags    memory_flags,
+            const vk::Format                 format,
+            const vk::ImageUsageFlags        usage_flags,
+            const vk::Extent3D              &extent,
+            const vma::Allocator             allocator) {
+            vk::ImageCreateInfo vk_image_create_info{};
+            vk_image_create_info
+                .setImageType(vk::ImageType::e3D)
+                .setFormat(format)
+                .setExtent(extent)
+                .setArrayLayers(1)
+                .setMipLevels(1)
+                .setSamples(vk::SampleCountFlagBits::e1)
+                .setInitialLayout(vk::ImageLayout::eUndefined)
+                .setTiling(vk::ImageTiling::eOptimal)
+                .setUsage(usage_flags);
+            vma::AllocationCreateInfo vma_allocation_create_info{};
+            vma_allocation_create_info
+                .setRequiredFlags(memory_flags)
+                .setFlags(allocation_flags)
+                .setUsage(vma::MemoryUsage::eAutoPreferDevice);
+
+            const auto [result, vma_image_allocation] =
+                allocator.createImage(vk_image_create_info, vma_allocation_create_info);
+            DIGNIS_VK_CHECK(result);
+            const auto [image, vma_allocation] = vma_image_allocation;
+
+            Allocation allocation{};
+            allocation.Image         = image;
+            allocation.Extent        = extent;
+            allocation.Format        = format;
+            allocation.VmaAllocation = vma_allocation;
+            allocation.UsageFlags    = usage_flags;
+            return allocation;
+        }
+
+        Allocation Allocate(
+            const vma::AllocationCreateFlags allocation_flags,
+            const vk::MemoryPropertyFlags    memory_flags,
+            const vk::Format                 format,
+            const vk::ImageUsageFlags        usage_flags,
+            const vk::Extent2D              &extent,
+            const vma::Allocator             allocator) {
+            vk::ImageCreateInfo vk_image_create_info{};
+            vk_image_create_info
+                .setImageType(vk::ImageType::e2D)
+                .setFormat(format)
+                .setExtent(vk::Extent3D{extent, 1})
+                .setArrayLayers(1)
+                .setMipLevels(1)
+                .setSamples(vk::SampleCountFlagBits::e1)
+                .setInitialLayout(vk::ImageLayout::eUndefined)
+                .setTiling(vk::ImageTiling::eOptimal)
+                .setUsage(usage_flags);
+            vma::AllocationCreateInfo vma_allocation_create_info{};
+            vma_allocation_create_info
+                .setRequiredFlags(memory_flags)
+                .setFlags(allocation_flags)
+                .setUsage(vma::MemoryUsage::eAutoPreferDevice);
+
+            const auto [result, vma_image_allocation] =
+                allocator.createImage(vk_image_create_info, vma_allocation_create_info);
+            DIGNIS_VK_CHECK(result);
+            const auto [image, vma_allocation] = vma_image_allocation;
+
+            Allocation allocation{};
+            allocation.Image         = image;
+            allocation.Extent        = vk::Extent3D{extent, 1};
+            allocation.Format        = format;
+            allocation.VmaAllocation = vma_allocation;
+            allocation.UsageFlags    = usage_flags;
+            return allocation;
+        }
+
+        Allocation Allocate(
+            const vma::AllocationCreateFlags allocation_flags,
+            const vk::Format                 format,
+            const vk::ImageUsageFlags        usage_flags,
+            const vk::Extent3D              &extent,
+            const vma::Allocator             allocator) {
+            return Allocate(allocation_flags, {}, format, usage_flags, extent, allocator);
+        }
+
+        Allocation Allocate(
+            const vma::AllocationCreateFlags allocation_flags,
+            const vk::Format                 format,
+            const vk::ImageUsageFlags        usage_flags,
+            const vk::Extent2D              &extent,
+            const vma::Allocator             allocator) {
+            return Allocate(allocation_flags, {}, format, usage_flags, extent, allocator);
+        }
     }  // namespace Image
 
-    namespace ImageView {}
+    namespace ImageView {
+        vk::ImageView CreateColor3D(
+            const vk::Format format,
+            const vk::Image  image,
+            const vk::Device device) {
+            vk::ImageViewCreateInfo vk_image_view_create_info{};
+            vk_image_view_create_info
+                .setViewType(vk::ImageViewType::e3D)
+                .setFormat(format)
+                .setImage(image)
+                .setSubresourceRange(
+                    vk::ImageSubresourceRange{}
+                        .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                        .setBaseArrayLayer(0)
+                        .setBaseMipLevel(0)
+                        .setLayerCount(1)
+                        .setLevelCount(1));
+            auto [result, view] = device.createImageView(vk_image_view_create_info);
+            DIGNIS_VK_CHECK(result);
+            return view;
+        }
+
+        vk::ImageView CreateDepth3D(
+            const vk::Format format,
+            const vk::Image  image,
+            const vk::Device device) {
+            vk::ImageViewCreateInfo vk_image_view_create_info{};
+            vk_image_view_create_info
+                .setViewType(vk::ImageViewType::e3D)
+                .setFormat(format)
+                .setImage(image)
+                .setSubresourceRange(
+                    vk::ImageSubresourceRange{}
+                        .setAspectMask(vk::ImageAspectFlagBits::eDepth)
+                        .setBaseArrayLayer(0)
+                        .setBaseMipLevel(0)
+                        .setLayerCount(1)
+                        .setLevelCount(1));
+            auto [result, view] = device.createImageView(vk_image_view_create_info);
+            DIGNIS_VK_CHECK(result);
+            return view;
+        }
+
+        vk::ImageView CreateColor2D(
+            const vk::Format format,
+            const vk::Image  image,
+            const vk::Device device) {
+            vk::ImageViewCreateInfo vk_image_view_create_info{};
+            vk_image_view_create_info
+                .setViewType(vk::ImageViewType::e2D)
+                .setFormat(format)
+                .setImage(image)
+                .setSubresourceRange(
+                    vk::ImageSubresourceRange{}
+                        .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                        .setBaseArrayLayer(0)
+                        .setBaseMipLevel(0)
+                        .setLayerCount(1)
+                        .setLevelCount(1));
+            auto [result, view] = device.createImageView(vk_image_view_create_info);
+            DIGNIS_VK_CHECK(result);
+            return view;
+        }
+
+        vk::ImageView CreateDepth2D(
+            const vk::Format format,
+            const vk::Image  image,
+            const vk::Device device) {
+            vk::ImageViewCreateInfo vk_image_view_create_info{};
+            vk_image_view_create_info
+                .setViewType(vk::ImageViewType::e2D)
+                .setFormat(format)
+                .setImage(image)
+                .setSubresourceRange(
+                    vk::ImageSubresourceRange{}
+                        .setAspectMask(vk::ImageAspectFlagBits::eDepth)
+                        .setBaseArrayLayer(0)
+                        .setBaseMipLevel(0)
+                        .setLayerCount(1)
+                        .setLevelCount(1));
+            auto [result, view] = device.createImageView(vk_image_view_create_info);
+            DIGNIS_VK_CHECK(result);
+            return view;
+        }
+    }  // namespace ImageView
 }  // namespace Ignis::Vulkan

@@ -32,5 +32,12 @@ namespace Ignis::Vulkan {
         void End(vk::CommandBuffer buffer);
 
         vk::CommandBufferSubmitInfo GetSubmitInfo(vk::CommandBuffer buffer);
+
+        void CopyImageToImage(
+            vk::Image           src_image,
+            vk::Image           dst_image,
+            const vk::Extent3D &src_extent,
+            const vk::Extent3D &dst_extent,
+            vk::CommandBuffer   command_buffer);
     }  // namespace CommandBuffer
 }  // namespace Ignis::Vulkan
