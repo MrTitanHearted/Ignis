@@ -39,5 +39,13 @@ namespace Ignis::Vulkan {
             const vk::Extent3D &src_extent,
             const vk::Extent3D &dst_extent,
             vk::CommandBuffer   command_buffer);
+
+        void CopyBufferToBuffer(
+            vk::Buffer        src_buffer,
+            vk::Buffer        dst_buffer,
+            uint64_t          src_offset,
+            uint64_t          dst_offset,
+            uint64_t          size,
+            vk::CommandBuffer command_buffer);
     }  // namespace CommandBuffer
 }  // namespace Ignis::Vulkan

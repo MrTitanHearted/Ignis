@@ -38,4 +38,10 @@ namespace Ignis::Vulkan {
             vk::BufferUsageFlags UsageFlags;
         };
     }  // namespace Buffer
+
+    struct VertexLayout {
+        vk::VertexInputBindingDescription Binding;
+
+        std::vector<vk::VertexInputAttributeDescription> Attributes;
+    };
 }  // namespace Ignis::Vulkan

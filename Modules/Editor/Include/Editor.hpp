@@ -27,6 +27,7 @@ namespace Ignis {
         void renderImGui();
 
         void drawFrame();
+        void drawGeometry(vk::ImageView target, vk::CommandBuffer cmd);
         void drawImGui(vk::ImageView target, vk::CommandBuffer cmd);
 
         void resize(uint32_t width, uint32_t height);
@@ -48,7 +49,16 @@ namespace Ignis {
         void initializeDrawImage();
         void releaseDrawImage();
 
+        void initializeTriangleData();
+        void releaseTriangleData();
+
         FrameData &getCurrentFrameData();
+
+       private:
+        struct Vertex {
+            glm::vec4 Position;
+            glm::vec4 Color;
+        };
 
        private:
         Logger m_Logger;
@@ -98,5 +108,14 @@ namespace Ignis {
 
         vk::PipelineLayout m_GradientPipelineLayout;
         vk::Pipeline       m_GradientPipeline;
+
+        vk::ShaderModule   m_TriangleShaderModule;
+        vk::PipelineLayout m_TrianglePipelineLayout;
+        vk::Pipeline       m_TrianglePipeline;
+
+        Vulkan::Buffer::Allocation m_TriangleVertexBuffer;
+        Vulkan::Buffer::Allocation m_TriangleIndexBuffer;
+
+        vk::DeviceAddress m_TriangleVertexBufferAddress;
     };
 }  // namespace Ignis

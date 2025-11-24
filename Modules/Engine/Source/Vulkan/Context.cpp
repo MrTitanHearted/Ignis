@@ -122,6 +122,7 @@ namespace Ignis::Vulkan {
 
         vk::PhysicalDeviceVulkan13Features vulkan13_features{};
         vk::PhysicalDeviceVulkan12Features vulkan12_features{};
+        vk::PhysicalDeviceVulkan11Features vulkan11_features{};
         vk::PhysicalDeviceFeatures2        features{};
 
         dynamic_state2_features.setExtendedDynamicState2(vk::True);
@@ -145,7 +146,10 @@ namespace Ignis::Vulkan {
             .setRuntimeDescriptorArray(vk::True)
             .setTimelineSemaphore(vk::True)
             .setPNext(&vulkan13_features);
-        features.setPNext(&vulkan12_features);
+        vulkan11_features
+            .setShaderDrawParameters(vk::True)
+            .setPNext(&vulkan12_features);
+        features.setPNext(&vulkan11_features);
 
         std::vector<float> queue_priorities{};
         queue_priorities.reserve(3);
@@ -163,7 +167,7 @@ namespace Ignis::Vulkan {
         vk_device_create_info
             .setQueueCreateInfos(vk_queue_create_info)
             .setPEnabledExtensionNames(device_extensions)
-            .setPNext(&vulkan12_features);
+            .setPNext(&features);
 
         {
             auto [result, vk_device] = s_pInstance->m_PhysicalDevice.createDevice(vk_device_create_info);

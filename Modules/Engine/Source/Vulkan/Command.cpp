@@ -112,5 +112,24 @@ namespace Ignis::Vulkan {
 
             command_buffer.blitImage2(blit_info);
         }
+
+        void CopyBufferToBuffer(
+            const vk::Buffer        src_buffer,
+            const vk::Buffer        dst_buffer,
+            const uint64_t          src_offset,
+            const uint64_t          dst_offset,
+            const uint64_t          size,
+            const vk::CommandBuffer command_buffer) {
+            vk::BufferCopy2 region{};
+            region
+                .setSrcOffset(src_offset)
+                .setDstOffset(dst_offset)
+                .setSize(size);
+            vk::CopyBufferInfo2 copy_info{};
+            copy_info.setSrcBuffer(src_buffer)
+                .setDstBuffer(dst_buffer)
+                .setRegions(region);
+            command_buffer.copyBuffer2(copy_info);
+        }
     }  // namespace CommandBuffer
 }  // namespace Ignis::Vulkan

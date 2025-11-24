@@ -62,9 +62,9 @@ namespace Ignis::Vulkan {
             allocator.destroyImage(allocation.Image, allocation.VmaAllocation);
         }
 
-        Allocation Allocate(
+        Allocation Allocate3D(
             const vma::AllocationCreateFlags allocation_flags,
-            const vk::MemoryPropertyFlags    memory_flags,
+            const vma::MemoryUsage           memory_usage,
             const vk::Format                 format,
             const vk::ImageUsageFlags        usage_flags,
             const vk::Extent3D              &extent,
@@ -82,14 +82,13 @@ namespace Ignis::Vulkan {
                 .setUsage(usage_flags);
             vma::AllocationCreateInfo vma_allocation_create_info{};
             vma_allocation_create_info
-                .setRequiredFlags(memory_flags)
                 .setFlags(allocation_flags)
-                .setUsage(vma::MemoryUsage::eAutoPreferDevice);
+                .setUsage(memory_usage);
 
-            const auto [result, vma_image_allocation] =
+            const auto [result, image_allocation] =
                 allocator.createImage(vk_image_create_info, vma_allocation_create_info);
             DIGNIS_VK_CHECK(result);
-            const auto [image, vma_allocation] = vma_image_allocation;
+            const auto [image, vma_allocation] = image_allocation;
 
             Allocation allocation{};
             allocation.Image         = image;
@@ -100,9 +99,18 @@ namespace Ignis::Vulkan {
             return allocation;
         }
 
-        Allocation Allocate(
+        Allocation Allocate3D(
+            const vma::MemoryUsage    memory_usage,
+            const vk::Format          format,
+            const vk::ImageUsageFlags usage_flags,
+            const vk::Extent3D       &extent,
+            const vma::Allocator      allocator) {
+            return Allocate3D({}, memory_usage, format, usage_flags, extent, allocator);
+        }
+
+        Allocation Allocate2D(
             const vma::AllocationCreateFlags allocation_flags,
-            const vk::MemoryPropertyFlags    memory_flags,
+            const vma::MemoryUsage           memory_usage,
             const vk::Format                 format,
             const vk::ImageUsageFlags        usage_flags,
             const vk::Extent2D              &extent,
@@ -120,14 +128,13 @@ namespace Ignis::Vulkan {
                 .setUsage(usage_flags);
             vma::AllocationCreateInfo vma_allocation_create_info{};
             vma_allocation_create_info
-                .setRequiredFlags(memory_flags)
                 .setFlags(allocation_flags)
-                .setUsage(vma::MemoryUsage::eAutoPreferDevice);
+                .setUsage(memory_usage);
 
-            const auto [result, vma_image_allocation] =
+            const auto [result, image_allocation] =
                 allocator.createImage(vk_image_create_info, vma_allocation_create_info);
             DIGNIS_VK_CHECK(result);
-            const auto [image, vma_allocation] = vma_image_allocation;
+            const auto [image, vma_allocation] = image_allocation;
 
             Allocation allocation{};
             allocation.Image         = image;
@@ -138,23 +145,15 @@ namespace Ignis::Vulkan {
             return allocation;
         }
 
-        Allocation Allocate(
-            const vma::AllocationCreateFlags allocation_flags,
-            const vk::Format                 format,
-            const vk::ImageUsageFlags        usage_flags,
-            const vk::Extent3D              &extent,
-            const vma::Allocator             allocator) {
-            return Allocate(allocation_flags, {}, format, usage_flags, extent, allocator);
+        Allocation Allocate2D(
+            const vma::MemoryUsage    memory_usage,
+            const vk::Format          format,
+            const vk::ImageUsageFlags usage_flags,
+            const vk::Extent2D       &extent,
+            const vma::Allocator      allocator) {
+            return Allocate2D({}, memory_usage, format, usage_flags, extent, allocator);
         }
 
-        Allocation Allocate(
-            const vma::AllocationCreateFlags allocation_flags,
-            const vk::Format                 format,
-            const vk::ImageUsageFlags        usage_flags,
-            const vk::Extent2D              &extent,
-            const vma::Allocator             allocator) {
-            return Allocate(allocation_flags, {}, format, usage_flags, extent, allocator);
-        }
     }  // namespace Image
 
     namespace ImageView {

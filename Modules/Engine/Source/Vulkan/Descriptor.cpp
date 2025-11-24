@@ -467,7 +467,7 @@ namespace Ignis::Vulkan {
             write.Index     = index;
             write.Type      = vk::DescriptorType::eUniformBuffer;
             write.InfoIndex = m_BufferInfos.size();
-            m_ImageWrites.push_back(write);
+            m_BufferWrites.push_back(write);
 
             vk::DescriptorBufferInfo buffer_info{};
             buffer_info
@@ -490,7 +490,7 @@ namespace Ignis::Vulkan {
             write.Index     = index;
             write.Type      = vk::DescriptorType::eStorageBuffer;
             write.InfoIndex = m_BufferInfos.size();
-            m_ImageWrites.push_back(write);
+            m_BufferWrites.push_back(write);
 
             vk::DescriptorBufferInfo buffer_info{};
             buffer_info

@@ -74,6 +74,8 @@ namespace Ignis {
 
         initializeDrawData();
 
+        initializeTriangleData();
+
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor initialized");
     }
 
@@ -81,6 +83,8 @@ namespace Ignis {
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor released");
 
         DIGNIS_VK_CHECK(m_Device.waitIdle());
+
+        releaseTriangleData();
 
         releaseDrawData();
 
@@ -140,11 +144,6 @@ namespace Ignis {
                     m_StopRendering = true;
                 });
 
-            if (m_StopRendering) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
-            }
-
             if (m_ResizeRequested) {
                 const auto [width, height] = Window::GetSize();
                 resize(width, height);
@@ -164,7 +163,8 @@ namespace Ignis {
                 ImGui::RenderPlatformWindowsDefault();
             }
 
-            drawFrame();
+            if (!m_StopRendering)
+                drawFrame();
 
             m_Timer.stop();
             m_DeltaTime = m_Timer.getElapsedTime();
@@ -221,7 +221,11 @@ namespace Ignis {
             std::ceil(m_SwapchainExtent.height / 16.0),
             1);
 
-        Vulkan::Image::TransitionLayout(m_DrawImage.Image, vk::ImageLayout::eGeneral, vk::ImageLayout::eTransferSrcOptimal, cmd);
+        Vulkan::Image::TransitionLayout(m_DrawImage.Image, vk::ImageLayout::eGeneral, vk::ImageLayout::eColorAttachmentOptimal, cmd);
+
+        drawGeometry(m_DrawImageView, cmd);
+
+        Vulkan::Image::TransitionLayout(m_DrawImage.Image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eTransferSrcOptimal, cmd);
         Vulkan::Image::TransitionLayout(frame_image, vk::ImageLayout::eTransferDstOptimal, cmd);
 
         Vulkan::CommandBuffer::CopyImageToImage(
@@ -267,6 +271,42 @@ namespace Ignis {
         }
 
         m_FrameIndex = (m_FrameIndex + 1) % m_FramesInFlight;
+    }
+
+    void Editor::drawGeometry(
+        const vk::ImageView     target,
+        const vk::CommandBuffer cmd) {
+        Vulkan::RenderPass::Begin(
+            m_SwapchainExtent,
+            {Vulkan::RenderPass::GetAttachmentInfo(target, vk::ImageLayout::eColorAttachmentOptimal)},
+            cmd);
+
+        vk::Viewport viewport{};
+        viewport
+            .setX(0)
+            .setY(m_SwapchainExtent.height)
+            .setWidth(static_cast<float>(m_SwapchainExtent.width))
+            .setHeight(-static_cast<float>(m_SwapchainExtent.height))
+            .setMinDepth(0.0f)
+            .setMaxDepth(1.0f);
+        vk::Rect2D scissor{};
+        scissor
+            .setOffset(vk::Offset2D{0, 0})
+            .setExtent(m_SwapchainExtent);
+
+        cmd.setViewport(0, viewport);
+        cmd.setScissor(0, scissor);
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, m_TrianglePipeline);
+        cmd.pushConstants(
+            m_TrianglePipelineLayout,
+            vk::ShaderStageFlagBits::eVertex,
+            0, sizeof(vk::DeviceAddress),
+            &m_TriangleVertexBufferAddress);
+        cmd.bindIndexBuffer(m_TriangleIndexBuffer.Buffer, 0, vk::IndexType::eUint32);
+        cmd.drawIndexed(3, 1, 0, 0, 0);
+
+        Vulkan::RenderPass::End(cmd);
     }
 
     void Editor::drawImGui(
@@ -464,11 +504,12 @@ namespace Ignis {
     }
 
     void Editor::initializeDrawImage() {
-        m_DrawImage = Vulkan::Image::Allocate(
-            {},
+        m_DrawImage = Vulkan::Image::Allocate2D(
+            vma::MemoryUsage::eAutoPreferDevice,
             vk::Format::eR32G32B32A32Sfloat,
             vk::ImageUsageFlagBits::eTransferSrc |
-                vk::ImageUsageFlagBits::eStorage,
+                vk::ImageUsageFlagBits::eStorage |
+                vk::ImageUsageFlagBits::eColorAttachment,
             m_SwapchainExtent,
             m_VmaAllocator);
 
@@ -484,6 +525,114 @@ namespace Ignis {
         Vulkan::Image::Destroy(m_DrawImage, m_VmaAllocator);
 
         m_DrawImageView = nullptr;
+    }
+
+    void Editor::initializeTriangleData() {
+        const FileAsset shader_source_file_asset =
+            FileAsset::BinaryFromPath("Assets/Shaders/Triangle2.spv").value();
+
+        const std::string_view shader_source = shader_source_file_asset.getContent();
+        std::vector<uint32_t>  shader_code{};
+        shader_code.resize(shader_source.size() / sizeof(uint32_t));
+        memcpy(shader_code.data(), shader_source.data(), shader_source.size());
+
+        m_TriangleShaderModule   = Vulkan::Shader::CreateModuleFromSPV(shader_code, m_Device);
+        m_TrianglePipelineLayout = Vulkan::PipelineLayout::Create(
+            {vk::PushConstantRange{vk::ShaderStageFlagBits::eVertex, 0, sizeof(vk::DeviceAddress)}},
+            {},
+            m_Device);
+
+        m_TrianglePipeline =
+            Vulkan::GraphicsPipeline::Builder()
+                .setVertexShader("vertexMain", m_TriangleShaderModule)
+                .setFragmentShader("fragmentMain", m_TriangleShaderModule)
+                .setInputTopology(vk::PrimitiveTopology::eTriangleList)
+                .setPolygonMode(vk::PolygonMode::eFill)
+                .setCullMode(vk::CullModeFlagBits::eNone, vk::FrontFace::eCounterClockwise)
+                .setColorAttachmentFormats(m_DrawImage.Format)
+                .setDepthAttachmentFormat(vk::Format::eUndefined)
+                .setNoDepthTest()
+                .setNoMultisampling()
+                .setNoBlending()
+                .build(m_TrianglePipelineLayout, m_Device);
+
+        constexpr uint32_t triangle_indices[] = {0, 1, 2};
+
+        constexpr Vertex triangle_vertices[] = {
+            Vertex{glm::vec4{-1.0f, -1.0f, 0.0f, 1.0f}, glm::vec4{1.0f, 0.0f, 0.0f, 1.0f}},
+            Vertex{glm::vec4{0.0f, 1.0f, 0.0f, 1.0f}, glm::vec4{0.0f, 1.0f, 0.0f, 1.0f}},
+            Vertex{glm::vec4{1.0f, -1.0f, 0.0f, 1.0f}, glm::vec4{0.0f, 0.0f, 1.0f, 1.0f}},
+        };
+
+        constexpr uint64_t triangle_vertices_size = sizeof(triangle_vertices);
+        constexpr uint64_t triangle_indices_size  = sizeof(triangle_indices);
+
+        m_TriangleVertexBuffer = Vulkan::Buffer::Allocate(
+            vma::MemoryUsage::eGpuOnly,
+            triangle_vertices_size,
+            vk::BufferUsageFlagBits::eStorageBuffer |
+                vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                vk::BufferUsageFlagBits::eTransferDst,
+            m_VmaAllocator);
+        m_TriangleIndexBuffer = Vulkan::Buffer::Allocate(
+            vma::MemoryUsage::eGpuOnly,
+            triangle_indices_size,
+            vk::BufferUsageFlagBits::eIndexBuffer |
+                vk::BufferUsageFlagBits::eTransferDst,
+            m_VmaAllocator);
+
+        const Vulkan::Buffer::Allocation staging_buffer =
+            Vulkan::Buffer::Allocate(
+                vma::AllocationCreateFlagBits::eMapped |
+                    vma::AllocationCreateFlagBits::eHostAccessSequentialWrite,
+                vma::MemoryUsage::eCpuOnly,
+                triangle_vertices_size + triangle_indices_size,
+                vk::BufferUsageFlagBits::eTransferSrc,
+                m_VmaAllocator);
+
+        DIGNIS_VK_CHECK(m_VmaAllocator.copyMemoryToAllocation(
+            triangle_vertices,
+            staging_buffer.VmaAllocation,
+            0,
+            staging_buffer.Size));
+        DIGNIS_VK_CHECK(m_VmaAllocator.copyMemoryToAllocation(
+            triangle_indices,
+            staging_buffer.VmaAllocation,
+            triangle_vertices_size,
+            staging_buffer.Size));
+
+        immediateSubmit([&, this](const vk::CommandBuffer cmd) {
+            Vulkan::CommandBuffer::CopyBufferToBuffer(
+                staging_buffer.Buffer,
+                m_TriangleVertexBuffer.Buffer,
+                0,
+                0,
+                triangle_vertices_size,
+                cmd);
+            Vulkan::CommandBuffer::CopyBufferToBuffer(
+                staging_buffer.Buffer,
+                m_TriangleIndexBuffer.Buffer,
+                triangle_vertices_size,
+                0,
+                triangle_indices_size,
+                cmd);
+        });
+
+        Vulkan::Buffer::Destroy(staging_buffer, m_VmaAllocator);
+
+        m_TriangleVertexBufferAddress = m_Device.getBufferAddress({m_TriangleVertexBuffer.Buffer});
+    }
+
+    void Editor::releaseTriangleData() {
+        Vulkan::Buffer::Destroy(m_TriangleVertexBuffer, m_VmaAllocator);
+        Vulkan::Buffer::Destroy(m_TriangleIndexBuffer, m_VmaAllocator);
+
+        m_Device.destroyPipeline(m_TrianglePipeline);
+        m_Device.destroyPipelineLayout(m_TrianglePipelineLayout);
+
+        m_Device.destroyShaderModule(m_TriangleShaderModule);
+
+        m_TriangleShaderModule = nullptr;
     }
 
     Editor::FrameData &Editor::getCurrentFrameData() {

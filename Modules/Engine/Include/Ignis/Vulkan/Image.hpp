@@ -19,32 +19,33 @@ namespace Ignis::Vulkan {
 
         void Destroy(const Allocation &allocation, vma::Allocator allocator);
 
-        Allocation Allocate(
+        Allocation Allocate3D(
             vma::AllocationCreateFlags allocation_flags,
-            vk::MemoryPropertyFlags    memory_flags,
+            vma::MemoryUsage           memory_usage,
             vk::Format                 format,
             vk::ImageUsageFlags        usage_flags,
             const vk::Extent3D        &extent,
             vma::Allocator             allocator);
-        Allocation Allocate(
+        Allocation Allocate3D(
+            vma::MemoryUsage    memory_usage,
+            vk::Format          format,
+            vk::ImageUsageFlags usage_flags,
+            const vk::Extent3D &extent,
+            vma::Allocator      allocator);
+
+        Allocation Allocate2D(
             vma::AllocationCreateFlags allocation_flags,
-            vk::MemoryPropertyFlags    memory_flags,
+            vma::MemoryUsage           memory_usage,
             vk::Format                 format,
             vk::ImageUsageFlags        usage_flags,
             const vk::Extent2D        &extent,
             vma::Allocator             allocator);
-        Allocation Allocate(
-            vma::AllocationCreateFlags allocation_flags,
-            vk::Format                 format,
-            vk::ImageUsageFlags        usage_flags,
-            const vk::Extent3D        &extent,
-            vma::Allocator             allocator);
-        Allocation Allocate(
-            vma::AllocationCreateFlags allocation_flags,
-            vk::Format                 format,
-            vk::ImageUsageFlags        usage_flags,
-            const vk::Extent2D        &extent,
-            vma::Allocator             allocator);
+        Allocation Allocate2D(
+            vma::MemoryUsage    memory_usage,
+            vk::Format          format,
+            vk::ImageUsageFlags usage_flags,
+            const vk::Extent2D &extent,
+            vma::Allocator      allocator);
     }  // namespace Image
 
     namespace ImageView {
