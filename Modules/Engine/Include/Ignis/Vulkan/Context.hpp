@@ -64,7 +64,6 @@ namespace Ignis::Vulkan {
         static void SelectSwapchainPresentMode(std::span<const vk::PresentModeKHR> preferred_present_modes);
 
         static bool CheckInstanceLayerSupport(const std::vector<const char *> &required_instance_layers);
-        static bool CheckPhysicalDeviceFeatureSupport(const vk::PhysicalDevice &physical_device);
         static bool CheckPhysicalDeviceSwapchainSupport(
             const vk::PhysicalDevice &physical_device,
             vk::ImageUsageFlags       required_usage_flags);

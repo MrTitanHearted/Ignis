@@ -25,16 +25,15 @@ namespace Ignis {
         editor_sink->set_pattern(Logger::GetFileSinkPattern());
 
         Logger::Initialize(&m_Logger, logger_settings);
-        Engine::Initialize(&m_Engine, {});
+        Engine::Initialize(&m_Engine, {
+            .WindowSettings = Window::Settings {
+                .Title = "Ignis - Editor",
+            },
+        });
 
         m_DeltaTime = 0.0;
 
-        Vulkan::Context::Initialize(
-            &m_VulkanContext,
-            {
-                .PreferredImageCount = 3,
-                .SurfaceUsageFlags   = vk::ImageUsageFlagBits::eStorage,
-            });
+        Vulkan::Context::Initialize(&m_VulkanContext, {});
 
         m_Device           = Vulkan::Context::GetDevice();
         m_Surface          = Vulkan::Context::GetSurface();
@@ -66,15 +65,18 @@ namespace Ignis {
 
         createRenderSemaphores();
 
-        m_StopRendering   = false;
+        initializeImmData();
+        initializeImGui();
+
+        createViewportImage(1, 1);
+
         m_ResizeRequested = false;
 
-        initializeImmData();
-        initializeImGuiData();
-
-        initializeDrawData();
-
-        initializeTriangleData();
+        immediateSubmit([](const vk::CommandBuffer cmd) {
+            for (uint32_t i = 0; i < Vulkan::Context::GetSwapchainImageCount(); i++) {
+                Vulkan::Image::TransitionLayout(Vulkan::Context::GetSwapchainImage(i), vk::ImageLayout::ePresentSrcKHR, cmd);
+            }
+        });
 
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor initialized");
     }
@@ -84,24 +86,17 @@ namespace Ignis {
 
         DIGNIS_VK_CHECK(m_Device.waitIdle());
 
-        releaseTriangleData();
-
-        releaseDrawData();
-
-        releaseImGuiData();
+        destroyViewportImage();
+        releaseImGui();
         releaseImmData();
 
-        releaseRenderSemaphores();
+        destroyRenderSemaphores();
 
         for (const auto &frame_data : m_Frames) {
             m_Device.destroyFence(frame_data.RenderFence);
             m_Device.destroySemaphore(frame_data.SwapchainSemaphore);
             m_Device.destroyCommandPool(frame_data.CommandPool);
         }
-
-        m_Frames.clear();
-
-        m_WindowEvents.clear();
 
         Vulkan::Context::Shutdown();
 
@@ -128,20 +123,22 @@ namespace Ignis {
                     if (KeyCode::eF != key_event.Key)
                         return;
 
-                    if (Window::IsFullscreen())
+                    if (Window::IsFullscreen()) {
                         Window::MakeWindowed();
-                    else
+                    } else {
                         Window::MakeFullscreen();
+                    }
                 },
-                [this](const WindowResizeEvent &) {
-                    // resize(resize_event.Width, resize_event.Height);
+                [this](const WindowResizeEvent &resize_event) {
+                    auto [width, height] = resize_event;
+                    WindowEvents inner_events;
+                    while (width == 0 || height == 0) {
+                        Window::WaitEvents(&inner_events);
+                        width  = Window::GetWidth();
+                        height = Window::GetHeight();
+                    }
+
                     m_ResizeRequested = true;
-                },
-                [this](const WindowRestoreEvent &) {
-                    m_StopRendering = false;
-                },
-                [this](const WindowMinimizeEvent &) {
-                    m_StopRendering = true;
                 });
 
             if (m_ResizeRequested) {
@@ -149,30 +146,211 @@ namespace Ignis {
                 resize(width, height);
             }
 
-            ImGui_ImplVulkan_NewFrame();
-            ImGui_ImplGlfw_NewFrame();
-            ImGui::NewFrame();
+            {
+                ImGui_ImplVulkan_NewFrame();
+                ImGui_ImplGlfw_NewFrame();
+                ImGui::NewFrame();
 
-            renderImGui();
+                const ImGuiViewport *viewport = ImGui::GetMainViewport();
 
-            ImGui::EndFrame();
-            ImGui::Render();
+                ImGui::SetNextWindowPos(viewport->Pos);
+                ImGui::SetNextWindowSize(viewport->Size);
+                ImGui::SetNextWindowViewport(viewport->ID);
 
-            if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+                constexpr ImGuiWindowFlags host_window_flags =
+                    ImGuiWindowFlags_NoTitleBar |
+                    ImGuiWindowFlags_NoCollapse |
+                    ImGuiWindowFlags_NoResize |
+                    ImGuiWindowFlags_NoMove |
+                    ImGuiWindowFlags_NoBringToFrontOnFocus |
+                    ImGuiWindowFlags_NoNavFocus |
+                    ImGuiWindowFlags_NoDocking;
+
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+                ImGui::Begin("Ignis::Editor::DockSpace", nullptr, host_window_flags);
+                ImGui::PopStyleVar(3);
+                const ImGuiID dockspace_id = ImGui::GetID("Ignis::Editor::DockSpace");
+                ImGui::DockSpace(dockspace_id);
+                ImGui::End();
+
+                renderImGui();
+
+                ImGui::EndFrame();
+                ImGui::Render();
+
                 ImGui::UpdatePlatformWindows();
                 ImGui::RenderPlatformWindowsDefault();
             }
 
-            if (!m_StopRendering)
-                drawFrame();
+            drawFrame();
 
             m_Timer.stop();
             m_DeltaTime = m_Timer.getElapsedTime();
         }
     }
 
+    void Editor::createRenderSemaphores() {
+        const uint32_t swapchain_image_count = Vulkan::Context::GetSwapchainImageCount();
+        m_PresentSemaphores.clear();
+        m_PresentSemaphores.reserve(swapchain_image_count);
+        for (uint32_t i = 0; i < swapchain_image_count; i++) {
+            vk::Semaphore present_semaphore = Vulkan::Semaphore::Create(m_Device);
+            m_PresentSemaphores.push_back(present_semaphore);
+        }
+    }
+
+    void Editor::destroyRenderSemaphores() {
+        for (const vk::Semaphore &semaphore : m_PresentSemaphores) {
+            m_Device.destroySemaphore(semaphore);
+        }
+
+        m_PresentSemaphores.clear();
+    }
+
+    void Editor::initializeImmData() {
+        m_ImmFence = Vulkan::Fence::CreateSignaled(m_Device);
+
+        m_ImmCommandPool   = Vulkan::CommandPool::CreateResetCommandBuffer(m_QueueFamilyIndex, m_Device);
+        m_ImmCommandBuffer = Vulkan::CommandBuffer::AllocatePrimary(m_ImmCommandPool, m_Device);
+    }
+
+    void Editor::releaseImmData() {
+        m_Device.destroyCommandPool(m_ImmCommandPool);
+        m_Device.destroyFence(m_ImmFence);
+
+        m_ImmCommandBuffer = nullptr;
+    }
+
+    void Editor::initializeImGui() {
+        m_ImGuiDescriptorPool = Vulkan::DescriptorPool::Create(
+            vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+            100,
+            {
+                vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 100},
+            },
+            m_Device);
+
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+
+        ImGuiIO &io = ImGui::GetIO();
+        io.ConfigFlags |=
+            ImGuiConfigFlags_DockingEnable |
+            ImGuiConfigFlags_ViewportsEnable;
+        ImGui::StyleColorsDark();
+
+        ImGui_ImplGlfw_InitForVulkan(Window::Get(), true);
+
+        ImGui_ImplVulkan_InitInfo init_info{};
+        init_info.Instance            = Vulkan::Context::GetInstance();
+        init_info.PhysicalDevice      = Vulkan::Context::GetPhysicalDevice();
+        init_info.Device              = m_Device;
+        init_info.QueueFamily         = m_QueueFamilyIndex;
+        init_info.Queue               = m_GraphicsQueue;
+        init_info.DescriptorPool      = m_ImGuiDescriptorPool;
+        init_info.MinImageCount       = 3;
+        init_info.ImageCount          = Vulkan::Context::GetSwapchainImageCount();
+        init_info.UseDynamicRendering = true;
+        init_info.ApiVersion          = VK_API_VERSION_1_4;
+
+        init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+        init_info.PipelineInfoMain.PipelineRenderingCreateInfo =
+            vk::PipelineRenderingCreateInfo{}
+                .setColorAttachmentFormats({m_SwapchainFormat});
+        init_info.PipelineInfoForViewports = init_info.PipelineInfoMain;
+
+        ImGui_ImplVulkan_Init(&init_info);
+
+        io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+        io.ConfigWindowsResizeFromEdges = false;
+    }
+
+    void Editor::releaseImGui() {
+        if (const ImGuiIO &io = ImGui::GetIO(); io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            ImGui::DestroyPlatformWindows();
+        }
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+        m_Device.destroyDescriptorPool(m_ImGuiDescriptorPool);
+
+        m_ImGuiDescriptorPool = nullptr;
+    }
+
+    void Editor::createViewportImage(
+        const uint32_t width,
+        const uint32_t height) {
+        m_ViewportFormat = vk::Format::eR32G32B32A32Sfloat;
+
+        m_ViewportExtent
+            .setWidth(width)
+            .setHeight(height);
+
+        m_ViewportImage =
+            Vulkan::Image::Allocate2D(
+                vma::MemoryUsage::eGpuOnly,
+                m_ViewportFormat,
+                vk::ImageUsageFlagBits::eColorAttachment |
+                    vk::ImageUsageFlagBits::eSampled |
+                    vk::ImageUsageFlagBits::eTransferSrc |
+                    vk::ImageUsageFlagBits::eTransferDst,
+                m_ViewportExtent,
+                m_VmaAllocator);
+
+        m_ViewportImageView = Vulkan::ImageView::CreateColor2D(m_ViewportFormat, m_ViewportImage.Image, m_Device);
+
+        {
+            auto [result, vk_sampler] = m_Device.createSampler(vk::SamplerCreateInfo{});
+            DIGNIS_VK_CHECK(result);
+            m_ViewportImageSampler = vk_sampler;
+        }
+
+        immediateSubmit([this](const vk::CommandBuffer cmd) {
+            Vulkan::Image::TransitionLayout(m_ViewportImage.Image, vk::ImageLayout::eShaderReadOnlyOptimal, cmd);
+        });
+
+        m_ViewportImageDescriptor = ImGui_ImplVulkan_AddTexture(
+            m_ViewportImageSampler,
+            m_ViewportImageView,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+
+    void Editor::destroyViewportImage() {
+        ImGui_ImplVulkan_RemoveTexture(m_ViewportImageDescriptor);
+
+        m_Device.destroySampler(m_ViewportImageSampler);
+        m_Device.destroyImageView(m_ViewportImageView);
+
+        Vulkan::Image::Destroy(m_ViewportImage, m_VmaAllocator);
+
+        m_ViewportImageView = nullptr;
+    }
+
     void Editor::renderImGui() {
-        ImGui::ShowDemoWindow();
+        ImGui::Begin("Ignis::Editor::Toolbox");
+        ImGui::End();
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGui::Begin("Ignis::Editor::Viewport");
+        ImGui::PopStyleVar(2);
+
+        const ImVec2 viewport_size = ImGui::GetContentRegionAvail();
+
+        if (static_cast<uint32_t>(viewport_size.x) != m_ViewportExtent.width ||
+            static_cast<uint32_t>(viewport_size.y) != m_ViewportExtent.height) {
+            DIGNIS_VK_CHECK(m_Device.waitIdle())
+
+            destroyViewportImage();
+            createViewportImage(viewport_size.x, viewport_size.y);
+        }
+
+        ImGui::Image(static_cast<ImTextureRef>(static_cast<const VkDescriptorSet &>(m_ViewportImageDescriptor)), viewport_size);
+
+        ImGui::End();
     }
 
     void Editor::drawFrame() {
@@ -201,44 +379,19 @@ namespace Ignis {
 
         DIGNIS_VK_CHECK(cmd.reset());
 
-        const vk::Image     frame_image             = Vulkan::Context::GetSwapchainImage(swapchain_image_index);
-        const vk::ImageView frame_view              = Vulkan::Context::GetSwapchainImageView(swapchain_image_index);
+        const vk::Image     frame_image = Vulkan::Context::GetSwapchainImage(swapchain_image_index);
+        const vk::ImageView frame_view  = Vulkan::Context::GetSwapchainImageView(swapchain_image_index);
+
         const vk::Semaphore frame_present_semaphore = m_PresentSemaphores[swapchain_image_index];
 
         Vulkan::CommandBuffer::BeginOneTimeSubmit(cmd);
 
-        Vulkan::Image::TransitionLayout(m_DrawImage.Image, vk::ImageLayout::eGeneral, cmd);
+        Vulkan::Image::TransitionLayout(m_ViewportImage.Image, vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal, cmd);
+        drawGeometry(m_ViewportImageView, m_ViewportExtent, cmd);
+        Vulkan::Image::TransitionLayout(m_ViewportImage.Image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, cmd);
 
-        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, m_GradientPipeline);
-        cmd.bindDescriptorSets(
-            vk::PipelineBindPoint::eCompute,
-            m_GradientPipelineLayout,
-            0,
-            {m_DrawImageDescriptor},
-            {});
-        cmd.dispatch(
-            std::ceil(m_SwapchainExtent.width / 16.0),
-            std::ceil(m_SwapchainExtent.height / 16.0),
-            1);
-
-        Vulkan::Image::TransitionLayout(m_DrawImage.Image, vk::ImageLayout::eGeneral, vk::ImageLayout::eColorAttachmentOptimal, cmd);
-
-        drawGeometry(m_DrawImageView, cmd);
-
-        Vulkan::Image::TransitionLayout(m_DrawImage.Image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eTransferSrcOptimal, cmd);
-        Vulkan::Image::TransitionLayout(frame_image, vk::ImageLayout::eTransferDstOptimal, cmd);
-
-        Vulkan::CommandBuffer::CopyImageToImage(
-            m_DrawImage.Image,
-            frame_image,
-            vk::Extent3D{m_SwapchainExtent, 1},
-            vk::Extent3D{m_SwapchainExtent, 1},
-            cmd);
-
-        Vulkan::Image::TransitionLayout(frame_image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eColorAttachmentOptimal, cmd);
-
-        drawImGui(frame_view, cmd);
-
+        Vulkan::Image::TransitionLayout(frame_image, vk::ImageLayout::ePresentSrcKHR, vk::ImageLayout::eColorAttachmentOptimal, cmd);
+        drawImGui(frame_view, m_SwapchainExtent, cmd);
         Vulkan::Image::TransitionLayout(frame_image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR, cmd);
 
         Vulkan::CommandBuffer::End(cmd);
@@ -275,43 +428,42 @@ namespace Ignis {
 
     void Editor::drawGeometry(
         const vk::ImageView     target,
-        const vk::CommandBuffer cmd) {
-        Vulkan::RenderPass::Begin(
-            m_SwapchainExtent,
-            {Vulkan::RenderPass::GetAttachmentInfo(target, vk::ImageLayout::eColorAttachmentOptimal)},
-            cmd);
-
+        const vk::Extent2D     &extent,
+        const vk::CommandBuffer cmd) const {
+        (void)m_Device;
         vk::Viewport viewport{};
         viewport
             .setX(0)
-            .setY(m_SwapchainExtent.height)
-            .setWidth(static_cast<float>(m_SwapchainExtent.width))
-            .setHeight(-static_cast<float>(m_SwapchainExtent.height))
+            .setY(extent.height)
+            .setWidth(static_cast<float>(extent.width))
+            .setHeight(-static_cast<float>(extent.height))
             .setMinDepth(0.0f)
             .setMaxDepth(1.0f);
         vk::Rect2D scissor{};
         scissor
             .setOffset(vk::Offset2D{0, 0})
-            .setExtent(m_SwapchainExtent);
+            .setExtent(extent);
+
+        const vk::ClearValue clear_value = vk::ClearColorValue{0.2f, 0.3f, static_cast<float>(glm::abs(glm::sin(glfwGetTime()))), 1.0f};
+        Vulkan::RenderPass::Begin(
+            extent,
+            {Vulkan::RenderPass::GetAttachmentInfo(
+                target,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                clear_value)},
+            cmd);
 
         cmd.setViewport(0, viewport);
         cmd.setScissor(0, scissor);
-
-        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, m_TrianglePipeline);
-        cmd.pushConstants(
-            m_TrianglePipelineLayout,
-            vk::ShaderStageFlagBits::eVertex,
-            0, sizeof(vk::DeviceAddress),
-            &m_TriangleVertexBufferAddress);
-        cmd.bindIndexBuffer(m_TriangleIndexBuffer.Buffer, 0, vk::IndexType::eUint32);
-        cmd.drawIndexed(3, 1, 0, 0, 0);
 
         Vulkan::RenderPass::End(cmd);
     }
 
     void Editor::drawImGui(
         const vk::ImageView     target,
-        const vk::CommandBuffer cmd) {
+        const vk::Extent2D     &extent,
+        const vk::CommandBuffer cmd) const {
+        (void)extent;
         Vulkan::RenderPass::Begin(
             m_SwapchainExtent,
             {Vulkan::RenderPass::GetAttachmentInfo(target, vk::ImageLayout::eColorAttachmentOptimal)},
@@ -324,36 +476,19 @@ namespace Ignis {
         DIGNIS_VK_CHECK(m_Device.waitIdle());
 
         Vulkan::Context::ResizeSwapchain(width, height);
-        m_Swapchain = Vulkan::Context::GetSwapchain();
-        m_SwapchainExtent
-            .setWidth(width)
-            .setHeight(height);
+        m_Swapchain       = Vulkan::Context::GetSwapchain();
+        m_SwapchainExtent = Vulkan::Context::GetSwapchainExtent();
 
-        releaseRenderSemaphores();
+        immediateSubmit([](const vk::CommandBuffer cmd) {
+            for (uint32_t i = 0; i < Vulkan::Context::GetSwapchainImageCount(); i++) {
+                Vulkan::Image::TransitionLayout(Vulkan::Context::GetSwapchainImage(i), vk::ImageLayout::ePresentSrcKHR, cmd);
+            }
+        });
+
+        destroyRenderSemaphores();
         createRenderSemaphores();
 
-        releaseDrawImage();
-        initializeDrawImage();
-
         m_ResizeRequested = false;
-    }
-
-    void Editor::createRenderSemaphores() {
-        const uint32_t swapchain_image_count = Vulkan::Context::GetSwapchainImageCount();
-        m_PresentSemaphores.clear();
-        m_PresentSemaphores.reserve(swapchain_image_count);
-        for (uint32_t i = 0; i < swapchain_image_count; i++) {
-            vk::Semaphore present_semaphore = Vulkan::Semaphore::Create(m_Device);
-            m_PresentSemaphores.push_back(present_semaphore);
-        }
-    }
-
-    void Editor::releaseRenderSemaphores() {
-        for (const vk::Semaphore &semaphore : m_PresentSemaphores) {
-            m_Device.destroySemaphore(semaphore);
-        }
-
-        m_PresentSemaphores.clear();
     }
 
     void Editor::immediateSubmit(fu2::function<void(vk::CommandBuffer cmd)> &&function) const {
@@ -373,266 +508,6 @@ namespace Ignis {
             m_ImmFence,
             m_GraphicsQueue);
         DIGNIS_VK_CHECK(m_Device.waitForFences(m_ImmFence, vk::True, UINT32_MAX));
-    }
-
-    void Editor::initializeImmData() {
-        m_ImmFence = Vulkan::Fence::CreateSignaled(m_Device);
-
-        m_ImmCommandPool   = Vulkan::CommandPool::CreateResetCommandBuffer(m_QueueFamilyIndex, m_Device);
-        m_ImmCommandBuffer = Vulkan::CommandBuffer::AllocatePrimary(m_ImmCommandPool, m_Device);
-    }
-
-    void Editor::releaseImmData() {
-        m_Device.destroyCommandPool(m_ImmCommandPool);
-        m_Device.destroyFence(m_ImmFence);
-
-        m_ImmCommandBuffer = nullptr;
-    }
-
-    void Editor::initializeImGuiData() {
-        m_ImGuiDescriptorPool = Vulkan::DescriptorPool::Create(
-            vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-            1000,
-            {
-                vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 1000},
-                vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 1000},
-                vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 1000},
-                vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1000},
-                vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 1000},
-                vk::DescriptorPoolSize{vk::DescriptorType::eStorageTexelBuffer, 1000},
-                vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 1000},
-                vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 1000},
-                vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic, 1000},
-                vk::DescriptorPoolSize{vk::DescriptorType::eStorageBufferDynamic, 1000},
-                vk::DescriptorPoolSize{vk::DescriptorType::eInputAttachment, 1000},
-            },
-            m_Device);
-
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-
-        ImGuiIO &io = ImGui::GetIO();
-        io.ConfigFlags |=
-            ImGuiConfigFlags_DockingEnable |
-            ImGuiConfigFlags_ViewportsEnable;
-        ImGui::StyleColorsDark();
-
-        ImGui_ImplGlfw_InitForVulkan(Window::Get(), true);
-
-        ImGui_ImplVulkan_InitInfo init_info{};
-        init_info.Instance                                     = Vulkan::Context::GetInstance();
-        init_info.PhysicalDevice                               = Vulkan::Context::GetPhysicalDevice();
-        init_info.Device                                       = m_Device;
-        init_info.QueueFamily                                  = m_QueueFamilyIndex;
-        init_info.Queue                                        = m_GraphicsQueue;
-        init_info.DescriptorPool                               = m_ImGuiDescriptorPool;
-        init_info.MinImageCount                                = 3;
-        init_info.ImageCount                                   = Vulkan::Context::GetSwapchainImageCount();
-        init_info.UseDynamicRendering                          = true;
-        init_info.ApiVersion                                   = VK_API_VERSION_1_4;
-        init_info.PipelineInfoMain.MSAASamples                 = VK_SAMPLE_COUNT_1_BIT;
-        init_info.PipelineInfoMain.PipelineRenderingCreateInfo = vk::PipelineRenderingCreateInfo{}
-                                                                     .setColorAttachmentFormats({m_SwapchainFormat});
-        init_info.PipelineInfoForViewports = init_info.PipelineInfoMain;
-
-        ImGui_ImplVulkan_Init(&init_info);
-
-        io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
-        io.ConfigWindowsResizeFromEdges = false;
-    }
-
-    void Editor::releaseImGuiData() {
-        if (const ImGuiIO &io = ImGui::GetIO(); io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-            ImGui::DestroyPlatformWindows();
-        }
-        ImGui_ImplVulkan_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
-        ImGui::DestroyContext();
-        m_Device.destroyDescriptorPool(m_ImGuiDescriptorPool);
-
-        m_ImGuiDescriptorPool = nullptr;
-    }
-
-    void Editor::initializeDrawData() {
-        const FileAsset shader_source_file_asset =
-            FileAsset::BinaryFromPath("Assets/Shaders/Compute.spv").value();
-
-        const std::string_view shader_source = shader_source_file_asset.getContent();
-        std::vector<uint32_t>  shader_code{};
-        shader_code.resize(shader_source.size() / sizeof(uint32_t));
-        memcpy(shader_code.data(), shader_source.data(), shader_source.size());
-
-        m_DescriptorPool = Vulkan::DescriptorPool::Create(
-            vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-            1,
-            {vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1000}},
-            m_Device);
-
-        m_ComputeShaderModule = Vulkan::Shader::CreateModuleFromSPV(shader_code, m_Device);
-
-        m_DrawImageDescriptorLayout = Vulkan::DescriptorLayout::Builder()
-                                          .addStorageImage(
-                                              0,
-                                              vk::ShaderStageFlagBits::eCompute)
-                                          .build(m_Device);
-
-        m_DrawImageDescriptor = Vulkan::DescriptorSet::Allocate(
-            m_DrawImageDescriptorLayout,
-            m_DescriptorPool,
-            m_Device);
-
-        m_GradientPipelineLayout = Vulkan::PipelineLayout::Create(
-            {m_DrawImageDescriptorLayout},
-            m_Device);
-        m_GradientPipeline = Vulkan::ComputePipeline::Create(
-            "computeMain",
-            m_ComputeShaderModule,
-            m_GradientPipelineLayout,
-            m_Device);
-
-        initializeDrawImage();
-    }
-
-    void Editor::releaseDrawData() {
-        releaseDrawImage();
-
-        m_Device.destroyPipeline(m_GradientPipeline);
-        m_Device.destroyPipelineLayout(m_GradientPipelineLayout);
-        m_Device.destroyDescriptorSetLayout(m_DrawImageDescriptorLayout);
-        m_Device.destroyShaderModule(m_ComputeShaderModule);
-        m_Device.destroyDescriptorPool(m_DescriptorPool);
-    }
-
-    void Editor::initializeDrawImage() {
-        m_DrawImage = Vulkan::Image::Allocate2D(
-            vma::MemoryUsage::eAutoPreferDevice,
-            vk::Format::eR32G32B32A32Sfloat,
-            vk::ImageUsageFlagBits::eTransferSrc |
-                vk::ImageUsageFlagBits::eStorage |
-                vk::ImageUsageFlagBits::eColorAttachment,
-            m_SwapchainExtent,
-            m_VmaAllocator);
-
-        m_DrawImageView = Vulkan::ImageView::CreateColor2D(m_DrawImage.Format, m_DrawImage.Image, m_Device);
-
-        Vulkan::DescriptorSet::Writer()
-            .addStorageImage(0, m_DrawImageView, vk::ImageLayout::eGeneral)
-            .write(m_DrawImageDescriptor, m_Device);
-    }
-
-    void Editor::releaseDrawImage() {
-        m_Device.destroyImageView(m_DrawImageView);
-        Vulkan::Image::Destroy(m_DrawImage, m_VmaAllocator);
-
-        m_DrawImageView = nullptr;
-    }
-
-    void Editor::initializeTriangleData() {
-        const FileAsset shader_source_file_asset =
-            FileAsset::BinaryFromPath("Assets/Shaders/Triangle2.spv").value();
-
-        const std::string_view shader_source = shader_source_file_asset.getContent();
-        std::vector<uint32_t>  shader_code{};
-        shader_code.resize(shader_source.size() / sizeof(uint32_t));
-        memcpy(shader_code.data(), shader_source.data(), shader_source.size());
-
-        m_TriangleShaderModule   = Vulkan::Shader::CreateModuleFromSPV(shader_code, m_Device);
-        m_TrianglePipelineLayout = Vulkan::PipelineLayout::Create(
-            {vk::PushConstantRange{vk::ShaderStageFlagBits::eVertex, 0, sizeof(vk::DeviceAddress)}},
-            {},
-            m_Device);
-
-        m_TrianglePipeline =
-            Vulkan::GraphicsPipeline::Builder()
-                .setVertexShader("vertexMain", m_TriangleShaderModule)
-                .setFragmentShader("fragmentMain", m_TriangleShaderModule)
-                .setInputTopology(vk::PrimitiveTopology::eTriangleList)
-                .setPolygonMode(vk::PolygonMode::eFill)
-                .setCullMode(vk::CullModeFlagBits::eNone, vk::FrontFace::eCounterClockwise)
-                .setColorAttachmentFormats(m_DrawImage.Format)
-                .setDepthAttachmentFormat(vk::Format::eUndefined)
-                .setNoDepthTest()
-                .setNoMultisampling()
-                .setNoBlending()
-                .build(m_TrianglePipelineLayout, m_Device);
-
-        constexpr uint32_t triangle_indices[] = {0, 1, 2};
-
-        constexpr Vertex triangle_vertices[] = {
-            Vertex{glm::vec4{-1.0f, -1.0f, 0.0f, 1.0f}, glm::vec4{1.0f, 0.0f, 0.0f, 1.0f}},
-            Vertex{glm::vec4{0.0f, 1.0f, 0.0f, 1.0f}, glm::vec4{0.0f, 1.0f, 0.0f, 1.0f}},
-            Vertex{glm::vec4{1.0f, -1.0f, 0.0f, 1.0f}, glm::vec4{0.0f, 0.0f, 1.0f, 1.0f}},
-        };
-
-        constexpr uint64_t triangle_vertices_size = sizeof(triangle_vertices);
-        constexpr uint64_t triangle_indices_size  = sizeof(triangle_indices);
-
-        m_TriangleVertexBuffer = Vulkan::Buffer::Allocate(
-            vma::MemoryUsage::eGpuOnly,
-            triangle_vertices_size,
-            vk::BufferUsageFlagBits::eStorageBuffer |
-                vk::BufferUsageFlagBits::eShaderDeviceAddress |
-                vk::BufferUsageFlagBits::eTransferDst,
-            m_VmaAllocator);
-        m_TriangleIndexBuffer = Vulkan::Buffer::Allocate(
-            vma::MemoryUsage::eGpuOnly,
-            triangle_indices_size,
-            vk::BufferUsageFlagBits::eIndexBuffer |
-                vk::BufferUsageFlagBits::eTransferDst,
-            m_VmaAllocator);
-
-        const Vulkan::Buffer::Allocation staging_buffer =
-            Vulkan::Buffer::Allocate(
-                vma::AllocationCreateFlagBits::eMapped |
-                    vma::AllocationCreateFlagBits::eHostAccessSequentialWrite,
-                vma::MemoryUsage::eCpuOnly,
-                triangle_vertices_size + triangle_indices_size,
-                vk::BufferUsageFlagBits::eTransferSrc,
-                m_VmaAllocator);
-
-        DIGNIS_VK_CHECK(m_VmaAllocator.copyMemoryToAllocation(
-            triangle_vertices,
-            staging_buffer.VmaAllocation,
-            0,
-            staging_buffer.Size));
-        DIGNIS_VK_CHECK(m_VmaAllocator.copyMemoryToAllocation(
-            triangle_indices,
-            staging_buffer.VmaAllocation,
-            triangle_vertices_size,
-            staging_buffer.Size));
-
-        immediateSubmit([&, this](const vk::CommandBuffer cmd) {
-            Vulkan::CommandBuffer::CopyBufferToBuffer(
-                staging_buffer.Buffer,
-                m_TriangleVertexBuffer.Buffer,
-                0,
-                0,
-                triangle_vertices_size,
-                cmd);
-            Vulkan::CommandBuffer::CopyBufferToBuffer(
-                staging_buffer.Buffer,
-                m_TriangleIndexBuffer.Buffer,
-                triangle_vertices_size,
-                0,
-                triangle_indices_size,
-                cmd);
-        });
-
-        Vulkan::Buffer::Destroy(staging_buffer, m_VmaAllocator);
-
-        m_TriangleVertexBufferAddress = m_Device.getBufferAddress({m_TriangleVertexBuffer.Buffer});
-    }
-
-    void Editor::releaseTriangleData() {
-        Vulkan::Buffer::Destroy(m_TriangleVertexBuffer, m_VmaAllocator);
-        Vulkan::Buffer::Destroy(m_TriangleIndexBuffer, m_VmaAllocator);
-
-        m_Device.destroyPipeline(m_TrianglePipeline);
-        m_Device.destroyPipelineLayout(m_TrianglePipelineLayout);
-
-        m_Device.destroyShaderModule(m_TriangleShaderModule);
-
-        m_TriangleShaderModule = nullptr;
     }
 
     Editor::FrameData &Editor::getCurrentFrameData() {

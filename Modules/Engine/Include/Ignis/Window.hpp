@@ -23,6 +23,7 @@ namespace Ignis {
         static void Shutdown();
 
         static void PollEvents(WindowEvents *events);
+        static void WaitEvents(WindowEvents *events);
 
         static void SetTitle(std::string_view title);
         static void SetSize(uint32_t width, uint32_t height);

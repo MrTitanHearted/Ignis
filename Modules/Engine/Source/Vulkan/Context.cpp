@@ -125,8 +125,11 @@ namespace Ignis::Vulkan {
         vk::PhysicalDeviceVulkan11Features vulkan11_features{};
         vk::PhysicalDeviceFeatures2        features{};
 
-        dynamic_state2_features.setExtendedDynamicState2(vk::True);
-        dynamic_state_features.setExtendedDynamicState(vk::True).setPNext(&dynamic_state2_features);
+        dynamic_state2_features
+            .setExtendedDynamicState2(vk::True);
+        dynamic_state_features
+            .setExtendedDynamicState(vk::True)
+            .setPNext(&dynamic_state2_features);
         vulkan13_features
             .setDynamicRendering(vk::True)
             .setSynchronization2(vk::True)
@@ -416,8 +419,7 @@ namespace Ignis::Vulkan {
         gtl::flat_hash_map<vk::PhysicalDeviceType, std::vector<vk::PhysicalDevice> > physical_device_map{};
 
         for (const vk::PhysicalDevice &physical_device : physical_devices) {
-            if (!(CheckPhysicalDeviceFeatureSupport(physical_device) &&
-                  CheckPhysicalDeviceSwapchainSupport(physical_device, required_usage_flags) &&
+            if (!(CheckPhysicalDeviceSwapchainSupport(physical_device, required_usage_flags) &&
                   CheckPhysicalDeviceExtensionSupport(physical_device, required_device_extensions))) {
                 continue;
             }
@@ -616,31 +618,6 @@ namespace Ignis::Vulkan {
         }
 
         return true;
-    }
-
-    bool Context::CheckPhysicalDeviceFeatureSupport(const vk::PhysicalDevice &physical_device) {
-        vk::PhysicalDeviceExtendedDynamicState2FeaturesEXT dynamic_state2_features{};
-        vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT  dynamic_state_features{};
-
-        vk::PhysicalDeviceVulkan13Features vulkan13_features{};
-        vk::PhysicalDeviceVulkan12Features vulkan12_features{};
-        vk::PhysicalDeviceFeatures2        features{};
-
-        dynamic_state_features.setPNext(&dynamic_state2_features);
-        vulkan13_features.setPNext(&dynamic_state_features);
-        vulkan12_features.setPNext(&vulkan13_features);
-        features.setPNext(&vulkan12_features);
-
-        physical_device.getFeatures2(&features);
-
-        return dynamic_state2_features.extendedDynamicState2 == vk::True &&
-               dynamic_state_features.extendedDynamicState == vk::True &&
-               vulkan13_features.dynamicRendering == vk::True &&
-               vulkan13_features.synchronization2 == vk::True &&
-               vulkan12_features.timelineSemaphore == vk::True &&
-               vulkan12_features.bufferDeviceAddress == vk::True &&
-               vulkan12_features.runtimeDescriptorArray == vk::True &&
-               vulkan12_features.descriptorIndexing == vk::True;
     }
 
     bool Context::CheckPhysicalDeviceSwapchainSupport(

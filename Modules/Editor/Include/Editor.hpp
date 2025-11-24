@@ -24,33 +24,33 @@ namespace Ignis {
         };
 
        private:
-        void renderImGui();
-
-        void drawFrame();
-        void drawGeometry(vk::ImageView target, vk::CommandBuffer cmd);
-        void drawImGui(vk::ImageView target, vk::CommandBuffer cmd);
-
-        void resize(uint32_t width, uint32_t height);
-
         void createRenderSemaphores();
-        void releaseRenderSemaphores();
-
-        void immediateSubmit(fu2::function<void(vk::CommandBuffer cmd)> &&function) const;
+        void destroyRenderSemaphores();
 
         void initializeImmData();
         void releaseImmData();
 
-        void initializeImGuiData();
-        void releaseImGuiData();
+        void initializeImGui();
+        void releaseImGui();
 
-        void initializeDrawData();
-        void releaseDrawData();
+        void createViewportImage(uint32_t width, uint32_t height);
+        void destroyViewportImage();
 
-        void initializeDrawImage();
-        void releaseDrawImage();
+        void renderImGui();
 
-        void initializeTriangleData();
-        void releaseTriangleData();
+        void drawFrame();
+        void drawGeometry(
+            vk::ImageView       target,
+            const vk::Extent2D &extent,
+            vk::CommandBuffer   cmd) const;
+        void drawImGui(
+            vk::ImageView       target,
+            const vk::Extent2D &extent,
+            vk::CommandBuffer   cmd) const;
+
+        void resize(uint32_t width, uint32_t height);
+
+        void immediateSubmit(fu2::function<void(vk::CommandBuffer cmd)> &&function) const;
 
         FrameData &getCurrentFrameData();
 
@@ -82,14 +82,11 @@ namespace Ignis {
         vk::Extent2D     m_SwapchainExtent;
         vma::Allocator   m_VmaAllocator;
 
-        std::vector<FrameData>     m_Frames;
-        std::vector<vk::Semaphore> m_PresentSemaphores;
-
         uint32_t m_FrameIndex;
         uint32_t m_FramesInFlight;
 
-        bool m_StopRendering;
-        bool m_ResizeRequested;
+        std::vector<FrameData>     m_Frames;
+        std::vector<vk::Semaphore> m_PresentSemaphores;
 
         vk::Fence         m_ImmFence;
         vk::CommandPool   m_ImmCommandPool;
@@ -97,25 +94,15 @@ namespace Ignis {
 
         vk::DescriptorPool m_ImGuiDescriptorPool;
 
-        Vulkan::Image::Allocation m_DrawImage;
-        vk::ImageView             m_DrawImageView;
+        vk::DescriptorSet m_ViewportImageDescriptor;
 
-        vk::DescriptorPool m_DescriptorPool;
-        vk::ShaderModule   m_ComputeShaderModule;
+        Vulkan::Image::Allocation m_ViewportImage;
 
-        vk::DescriptorSetLayout m_DrawImageDescriptorLayout;
-        vk::DescriptorSet       m_DrawImageDescriptor;
+        vk::Sampler   m_ViewportImageSampler;
+        vk::ImageView m_ViewportImageView;
+        vk::Format    m_ViewportFormat;
+        vk::Extent2D  m_ViewportExtent;
 
-        vk::PipelineLayout m_GradientPipelineLayout;
-        vk::Pipeline       m_GradientPipeline;
-
-        vk::ShaderModule   m_TriangleShaderModule;
-        vk::PipelineLayout m_TrianglePipelineLayout;
-        vk::Pipeline       m_TrianglePipeline;
-
-        Vulkan::Buffer::Allocation m_TriangleVertexBuffer;
-        Vulkan::Buffer::Allocation m_TriangleIndexBuffer;
-
-        vk::DeviceAddress m_TriangleVertexBufferAddress;
+        bool m_ResizeRequested;
     };
 }  // namespace Ignis

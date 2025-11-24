@@ -105,6 +105,15 @@ namespace Ignis {
         s_pEvents = nullptr;
     }
 
+    void Window::WaitEvents(WindowEvents *events) {
+        DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Window is not initialized");
+        DIGNIS_ASSERT(s_pEvents == nullptr, "How is Ignis::Window::s_pEvents initialized?");
+
+        s_pEvents = events;
+        glfwWaitEvents();
+        s_pEvents = nullptr;
+    }
+
     void Window::SetTitle(const std::string_view title) {
         DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Window is not initialized");
         glfwSetWindowTitle(s_pInstance->m_pWindow, title.data());

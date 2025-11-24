@@ -43,7 +43,6 @@
 #include <gtl/phmap.hpp>
 
 #include <vulkan/vulkan.hpp>
-#include <vulkan/vk_enum_string_helper.h>
 
 #include <vk_mem_alloc.hpp>
 
@@ -53,5 +52,12 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
+#include <glm/gtx/string_cast.hpp>
