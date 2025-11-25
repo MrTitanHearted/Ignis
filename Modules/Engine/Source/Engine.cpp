@@ -44,6 +44,11 @@ namespace Ignis {
         return s_pInstance->m_IsRunning.load();
     }
 
+    Entity Engine::CreateEntity() {
+        DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Engine is not initialized");
+        return Ignis::CreateEntity();
+    }
+
     IGNIS_IF_DEBUG(Engine::State::~State() {
         assert(s_pInstance == nullptr && "Forgot to shutdown Ignis::Engine");
     })

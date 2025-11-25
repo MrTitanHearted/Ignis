@@ -332,7 +332,7 @@ namespace Ignis::Vulkan {
             m_BufferInfos.clear();
         }
 
-        void Writer::write(
+        void Writer::update(
             const vk::DescriptorSet set,
             const vk::Device        device) {
             std::vector<vk::WriteDescriptorSet> descriptor_writes{};
@@ -373,7 +373,7 @@ namespace Ignis::Vulkan {
             device.updateDescriptorSets(descriptor_writes, {});
         }
 
-        Writer &Writer::addSampler(
+        Writer &Writer::writeSampler(
             const uint32_t    binding,
             const uint32_t    index,
             const vk::Sampler sampler) {
@@ -391,7 +391,7 @@ namespace Ignis::Vulkan {
             return *this;
         }
 
-        Writer &Writer::addCombinedImageSampler(
+        Writer &Writer::writeCombinedImageSampler(
             const uint32_t        binding,
             const uint32_t        index,
             const vk::ImageView   view,
@@ -414,7 +414,7 @@ namespace Ignis::Vulkan {
             return *this;
         }
 
-        Writer &Writer::addSampledImage(
+        Writer &Writer::writeSampledImage(
             const uint32_t        binding,
             const uint32_t        index,
             const vk::ImageView   view,
@@ -435,7 +435,7 @@ namespace Ignis::Vulkan {
             return *this;
         }
 
-        Writer &Writer::addStorageImage(
+        Writer &Writer::writeStorageImage(
             const uint32_t        binding,
             const uint32_t        index,
             const vk::ImageView   view,
@@ -456,7 +456,7 @@ namespace Ignis::Vulkan {
             return *this;
         }
 
-        Writer &Writer::addUniformBuffer(
+        Writer &Writer::writeUniformBuffer(
             const uint32_t   binding,
             const uint32_t   index,
             const vk::Buffer buffer,
@@ -479,7 +479,7 @@ namespace Ignis::Vulkan {
             return *this;
         }
 
-        Writer &Writer::addStorageBuffer(
+        Writer &Writer::writeStorageBuffer(
             const uint32_t   binding,
             const uint32_t   index,
             const vk::Buffer buffer,
@@ -502,48 +502,48 @@ namespace Ignis::Vulkan {
             return *this;
         }
 
-        Writer &Writer::addSampler(
+        Writer &Writer::writeSampler(
             const uint32_t    binding,
             const vk::Sampler sampler) {
-            return addSampler(binding, 0, sampler);
+            return writeSampler(binding, 0, sampler);
         }
 
-        Writer &Writer::addCombinedImageSampler(
+        Writer &Writer::writeCombinedImageSampler(
             const uint32_t        binding,
             const vk::ImageView   view,
             const vk::ImageLayout layout,
             const vk::Sampler     sampler) {
-            return addCombinedImageSampler(binding, 0, view, layout, sampler);
+            return writeCombinedImageSampler(binding, 0, view, layout, sampler);
         }
 
-        Writer &Writer::addSampledImage(
+        Writer &Writer::writeSampledImage(
             const uint32_t        binding,
             const vk::ImageView   view,
             const vk::ImageLayout layout) {
-            return addSampledImage(binding, 0, view, layout);
+            return writeSampledImage(binding, 0, view, layout);
         }
 
-        Writer &Writer::addStorageImage(
+        Writer &Writer::writeStorageImage(
             const uint32_t        binding,
             const vk::ImageView   view,
             const vk::ImageLayout layout) {
-            return addStorageImage(binding, 0, view, layout);
+            return writeStorageImage(binding, 0, view, layout);
         }
 
-        Writer &Writer::addUniformBuffer(
+        Writer &Writer::writeUniformBuffer(
             const uint32_t   binding,
             const vk::Buffer buffer,
             const uint64_t   offset,
             const uint64_t   size) {
-            return addUniformBuffer(binding, 0, buffer, offset, size);
+            return writeUniformBuffer(binding, 0, buffer, offset, size);
         }
 
-        Writer &Writer::addStorageBuffer(
+        Writer &Writer::writeStorageBuffer(
             const uint32_t   binding,
             const vk::Buffer buffer,
             const uint64_t   offset,
             const uint64_t   size) {
-            return addStorageBuffer(binding, 0, buffer, offset, size);
+            return writeStorageBuffer(binding, 0, buffer, offset, size);
         }
     }  // namespace DescriptorSet
 }  // namespace Ignis::Vulkan

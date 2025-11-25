@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Ignis/Assets.hpp>
+
 #include <Ignis/Window/Enums.hpp>
 #include <Ignis/Window/Events.hpp>
 
@@ -24,6 +26,8 @@ namespace Ignis {
 
         static void PollEvents(WindowEvents *events);
         static void WaitEvents(WindowEvents *events);
+
+        static void SetIcon(std::string_view path);
 
         static void SetTitle(std::string_view title);
         static void SetSize(uint32_t width, uint32_t height);

@@ -26,10 +26,12 @@ namespace Ignis {
 
         Logger::Initialize(&m_Logger, logger_settings);
         Engine::Initialize(&m_Engine, {
-            .WindowSettings = Window::Settings {
-                .Title = "Ignis - Editor",
-            },
-        });
+                                          .WindowSettings = Window::Settings{
+                                              .Title = "Ignis::Editor",
+                                          },
+                                      });
+
+        Window::SetIcon("Assets/Icons/IgnisEditor.png");
 
         m_DeltaTime = 0.0;
 
@@ -302,11 +304,7 @@ namespace Ignis {
 
         m_ViewportImageView = Vulkan::ImageView::CreateColor2D(m_ViewportFormat, m_ViewportImage.Image, m_Device);
 
-        {
-            auto [result, vk_sampler] = m_Device.createSampler(vk::SamplerCreateInfo{});
-            DIGNIS_VK_CHECK(result);
-            m_ViewportImageSampler = vk_sampler;
-        }
+        m_ViewportImageSampler = Vulkan::Sampler::Create({}, m_Device);
 
         immediateSubmit([this](const vk::CommandBuffer cmd) {
             Vulkan::Image::TransitionLayout(m_ViewportImage.Image, vk::ImageLayout::eShaderReadOnlyOptimal, cmd);
@@ -331,6 +329,9 @@ namespace Ignis {
 
     void Editor::renderImGui() {
         ImGui::Begin("Ignis::Editor::Toolbox");
+
+        ImGui::ColorEdit3("Viewport Clear Color", &m_ViewportClearColor.r);
+
         ImGui::End();
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -444,7 +445,12 @@ namespace Ignis {
             .setOffset(vk::Offset2D{0, 0})
             .setExtent(extent);
 
-        const vk::ClearValue clear_value = vk::ClearColorValue{0.2f, 0.3f, static_cast<float>(glm::abs(glm::sin(glfwGetTime()))), 1.0f};
+        const vk::ClearValue clear_value = vk::ClearColorValue{
+            m_ViewportClearColor.r,
+            m_ViewportClearColor.g,
+            m_ViewportClearColor.b,
+            1.0f,
+        };
         Vulkan::RenderPass::Begin(
             extent,
             {Vulkan::RenderPass::GetAttachmentInfo(

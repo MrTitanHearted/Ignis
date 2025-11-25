@@ -160,63 +160,63 @@ namespace Ignis::Vulkan {
 
             void clear();
 
-            void write(vk::DescriptorSet set, vk::Device device);
+            void update(vk::DescriptorSet set, vk::Device device);
 
-            Writer &addSampler(
+            Writer &writeSampler(
                 uint32_t    binding,
                 uint32_t    index,
                 vk::Sampler sampler);
-            Writer &addCombinedImageSampler(
+            Writer &writeCombinedImageSampler(
                 uint32_t        binding,
                 uint32_t        index,
                 vk::ImageView   view,
                 vk::ImageLayout layout,
                 vk::Sampler     sampler);
-            Writer &addSampledImage(
+            Writer &writeSampledImage(
                 uint32_t        binding,
                 uint32_t        index,
                 vk::ImageView   view,
                 vk::ImageLayout layout);
-            Writer &addStorageImage(
+            Writer &writeStorageImage(
                 uint32_t        binding,
                 uint32_t        index,
                 vk::ImageView   view,
                 vk::ImageLayout layout);
-            Writer &addUniformBuffer(
+            Writer &writeUniformBuffer(
                 uint32_t   binding,
                 uint32_t   index,
                 vk::Buffer buffer,
                 uint64_t   offset,
                 uint64_t   size);
-            Writer &addStorageBuffer(
+            Writer &writeStorageBuffer(
                 uint32_t   binding,
                 uint32_t   index,
                 vk::Buffer buffer,
                 uint64_t   offset,
                 uint64_t   size);
 
-            Writer &addSampler(
+            Writer &writeSampler(
                 uint32_t    binding,
                 vk::Sampler sampler);
-            Writer &addCombinedImageSampler(
+            Writer &writeCombinedImageSampler(
                 uint32_t        binding,
                 vk::ImageView   view,
                 vk::ImageLayout layout,
                 vk::Sampler     sampler);
-            Writer &addSampledImage(
+            Writer &writeSampledImage(
                 uint32_t        binding,
                 vk::ImageView   view,
                 vk::ImageLayout layout);
-            Writer &addStorageImage(
+            Writer &writeStorageImage(
                 uint32_t        binding,
                 vk::ImageView   view,
                 vk::ImageLayout layout);
-            Writer &addUniformBuffer(
+            Writer &writeUniformBuffer(
                 uint32_t   binding,
                 vk::Buffer buffer,
                 uint64_t   offset,
                 uint64_t   size);
-            Writer &addStorageBuffer(
+            Writer &writeStorageBuffer(
                 uint32_t   binding,
                 vk::Buffer buffer,
                 uint64_t   offset,

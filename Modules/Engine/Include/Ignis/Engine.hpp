@@ -17,11 +17,12 @@ namespace Ignis {
         static void Initialize(Engine *engine, const Settings &settings);
         static void Shutdown();
 
-        // static void Run();
         static void Stop();
         static void Start();
 
         static bool IsRunning();
+
+        static Entity CreateEntity();
 
        public:
         Engine()  = default;

@@ -114,6 +114,21 @@ namespace Ignis {
         s_pEvents = nullptr;
     }
 
+    void Window::SetIcon(const std::string_view path) {
+        DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Window is not initialized");
+        auto texture_asset_opt = TextureAsset::LoadFromPath(path, TextureAsset::Type::eRGBA8u);
+        DIGNIS_ASSERT(texture_asset_opt.has_value(), "Failed to load icon");
+
+        const TextureAsset texture_asset = texture_asset_opt.value();
+
+        GLFWimage icon{};
+        icon.width  = texture_asset.getWidth();
+        icon.height = texture_asset.getHeight();
+        icon.pixels = const_cast<unsigned char *>(texture_asset.getData().data());
+
+        glfwSetWindowIcon(s_pInstance->m_pWindow, 1, &icon);
+    }
+
     void Window::SetTitle(const std::string_view title) {
         DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Window is not initialized");
         glfwSetWindowTitle(s_pInstance->m_pWindow, title.data());

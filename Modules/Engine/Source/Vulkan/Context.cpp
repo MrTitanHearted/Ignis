@@ -230,7 +230,6 @@ namespace Ignis::Vulkan {
 
     void Context::ResizeSwapchain(const uint32_t width, const uint32_t height) {
         DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Vulkan::Context is not initialized");
-        DestroySwapchain();
         CreateSwapchain(width, height);
     }
 
@@ -341,12 +340,19 @@ namespace Ignis::Vulkan {
         s_pInstance->m_SwapchainExtent.width  = width;
         s_pInstance->m_SwapchainExtent.height = height;
 
+        const vk::SwapchainKHR old_swapchain = s_pInstance->m_Swapchain;
+
+        for (const vk::ImageView &view : s_pInstance->m_SwapchainImageViews) {
+            s_pInstance->m_Device.destroyImageView(view);
+        }
+
         s_pInstance->m_SwapchainImageViews.clear();
         s_pInstance->m_SwapchainImages.clear();
 
         {
             vk::SwapchainCreateInfoKHR swapchain_create_info{};
             swapchain_create_info
+                .setOldSwapchain(old_swapchain)
                 .setSurface(s_pInstance->m_Surface)
                 .setMinImageCount(s_pInstance->m_SwapchainMinImageCount)
                 .setImageFormat(s_pInstance->m_SwapchainFormat.format)
@@ -363,6 +369,10 @@ namespace Ignis::Vulkan {
             auto [result, swapchain] = s_pInstance->m_Device.createSwapchainKHR(swapchain_create_info);
             IGNIS_VK_CHECK(result);
             s_pInstance->m_Swapchain = swapchain;
+
+            if (old_swapchain) {
+                s_pInstance->m_Device.destroySwapchainKHR(old_swapchain);
+            }
         }
         {
             auto [result, swapchain_images] = s_pInstance->m_Device.getSwapchainImagesKHR(s_pInstance->m_Swapchain);

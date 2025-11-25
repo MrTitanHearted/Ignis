@@ -94,6 +94,10 @@ namespace Ignis {
 
         vk::DescriptorPool m_ImGuiDescriptorPool;
 
+        bool m_ResizeRequested;
+
+        glm::vec3 m_ViewportClearColor;
+
         vk::DescriptorSet m_ViewportImageDescriptor;
 
         Vulkan::Image::Allocation m_ViewportImage;
@@ -103,6 +107,5 @@ namespace Ignis {
         vk::Format    m_ViewportFormat;
         vk::Extent2D  m_ViewportExtent;
 
-        bool m_ResizeRequested;
     };
 }  // namespace Ignis
