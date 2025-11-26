@@ -35,9 +35,22 @@ namespace Ignis {
 
         m_Engine.getLayer<WindowLayer>()->setIcon("Assets/Icons/IgnisEditor.png");
 
+        WindowLayer *window_layer = m_Engine.getLayer<WindowLayer>();
+        VulkanLayer *vulkan_layer = m_Engine.getLayer<VulkanLayer>();
+        RenderLayer *render_layer = m_Engine.getLayer<RenderLayer>();
+
+        m_Engine.pushLayer<ImGuiLayer>(
+            window_layer,
+            vulkan_layer,
+            render_layer,
+            ImGuiLayer::Settings{});
+
+        ImGuiLayer *im_gui_layer = m_Engine.getLayer<ImGuiLayer>();
+
         m_Engine.pushLayer<EditorLayer>(
-            m_Engine.getLayer<VulkanLayer>(),
-            m_Engine.getLayer<RenderLayer>(),
+            vulkan_layer,
+            render_layer,
+            im_gui_layer,
             EditorLayer::Settings{});
 
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor initialized");

@@ -3,13 +3,19 @@
 #include <Ignis/Engine.hpp>
 
 namespace Ignis {
+    class ImGuiLayer;
+
     class EditorLayer final : public ILayer {
        public:
         struct Settings {
         };
 
        public:
-        explicit EditorLayer(VulkanLayer *vulkan_layer, RenderLayer *render_layer, const Settings &settings);
+        explicit EditorLayer(
+            VulkanLayer    *vulkan_layer,
+            RenderLayer    *render_layer,
+            ImGuiLayer     *im_gui_layer,
+            const Settings &settings);
         ~EditorLayer() override;
 
         void onEvent(AEvent &event) override;
@@ -18,13 +24,10 @@ namespace Ignis {
         void onRender() override;
 
        private:
-        void initializeImGui();
-        void releaseImGui();
+        void renderImGui();
 
         void createViewportImage(uint32_t width, uint32_t height);
         void destroyViewportImage();
-
-        void renderImGui();
 
         bool onWindowCloseEvent(const WindowCloseEvent &event) const;
         bool onWindowKeyEvent(const WindowKeyEvent &event) const;
@@ -32,6 +35,7 @@ namespace Ignis {
        private:
         VulkanLayer *m_pVulkanLayer;
         RenderLayer *m_pRenderLayer;
+        ImGuiLayer  *m_pImGuiLayer;
 
         vk::Device m_Device;
         uint32_t   m_QueueFamilyIndex;
@@ -41,17 +45,15 @@ namespace Ignis {
 
         vma::Allocator m_VmaAllocator;
 
-        vk::DescriptorPool m_ImGuiDescriptorPool;
-
         glm::vec3 m_ViewportClearColor;
-
-        vk::DescriptorSet m_ViewportImageDescriptor;
 
         Vulkan::Image::Allocation m_ViewportImage;
 
-        vk::Sampler   m_ViewportImageSampler;
         vk::ImageView m_ViewportImageView;
         vk::Format    m_ViewportFormat;
         vk::Extent2D  m_ViewportExtent;
+
+        vk::DescriptorSet   m_ViewportImageDescriptor;
+        FrameGraph::ImageID m_ViewportImageID;
     };
 }  // namespace Ignis

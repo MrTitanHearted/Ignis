@@ -2,6 +2,7 @@
 
 #include <Ignis/Engine.hpp>
 
+#include <Ignis/Editor/ImGuiLayer.hpp>
 #include <Ignis/Editor/Layer.hpp>
 
 namespace Ignis {
