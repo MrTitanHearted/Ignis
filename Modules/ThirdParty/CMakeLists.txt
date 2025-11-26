@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.20)
 
 project(IgnisThirdParty)
 
-add_subdirectory(vkfw)
 add_subdirectory(VulkanMemoryAllocator)
 add_subdirectory(VulkanMemoryAllocator-Hpp)
 
@@ -13,10 +12,8 @@ find_package(Vulkan REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(function2 CONFIG REQUIRED)
-find_package(concurrentqueue CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(fastgltf CONFIG REQUIRED)
-find_package(Taskflow CONFIG REQUIRED)
 find_package(slang CONFIG REQUIRED)
 
 set(IGNIS_THIRD_PARTY_IMGUI_HEADERS
@@ -53,15 +50,12 @@ add_library(Ignis::ThirdParty ALIAS IgnisThirdParty)
 
 target_link_libraries(IgnisThirdParty PUBLIC
         glfw
-        vkfw
         glm::glm
         spdlog::spdlog
         function2::function2
-        concurrentqueue::concurrentqueue
         Vulkan::Vulkan
         GPUOpen::VulkanMemoryAllocator
         VulkanMemoryAllocator-Hpp::VulkanMemoryAllocator-Hpp
-        Taskflow::Taskflow
         fastgltf::fastgltf
         # slang::slang
 )

@@ -1,5 +1,4 @@
-#include <Editor.hpp>
-#include <spdlog/sinks/basic_file_sink.h>
+#include <Ignis/Editor.hpp>
 
 int32_t main(
     const int32_t argc,

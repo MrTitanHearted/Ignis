@@ -142,7 +142,7 @@
 #endif
 
 #ifndef IGNIS_ASSERT
-    #define IGNIS_ASSERT(condition, ...) ::Ignis::Logger::Assert((condition), #condition, spdlog::source_loc{IGNIS_RELATIVE_FILE_, __LINE__, SPDLOG_FUNCTION}, ##__VA_ARGS__)
+    #define IGNIS_ASSERT(condition, ...) Ignis::Logger::Assert((condition), #condition, spdlog::source_loc{IGNIS_RELATIVE_FILE_, __LINE__, SPDLOG_FUNCTION}, ##__VA_ARGS__)
 #endif
 
 #ifndef DIGNIS_ASSERT
@@ -155,7 +155,7 @@
 
 namespace Ignis {
     template <typename... FormatArgs>
-    std::string formatStr(const std::string_view fmt, const FormatArgs &...args) {
+    std::string formatStr(const std::string_view fmt, FormatArgs &&...args) {
         return std::vformat(fmt, std::make_format_args(args...));
     }
 

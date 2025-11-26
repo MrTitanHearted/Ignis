@@ -21,7 +21,6 @@
 #include <format>
 #include <chrono>
 #include <atomic>
-#include <thread>
 #include <memory>
 #include <fstream>
 #include <variant>
@@ -33,7 +32,6 @@
 #include <typeindex>
 #include <filesystem>
 #include <type_traits>
-#include <condition_variable>
 
 #include <function2/function2.hpp>
 
@@ -41,6 +39,7 @@
 #include <spdlog/sinks/sink.h>
 
 #include <gtl/phmap.hpp>
+#include <gtl/vector.hpp>
 
 #include <vulkan/vulkan.hpp>
 

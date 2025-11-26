@@ -72,17 +72,17 @@ foreach(SHADER_FILE ${IGNIS_EDITOR_SHADERS})
     list(APPEND SPIRV_BINARY_FILES ${SPIRV})
 endforeach()
 
-add_custom_target(RTRApplicationAssets ALL
+add_custom_target(IgnisEditorAssets ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${IGNIS_ASSETS_SOURCE_DIR} ${IGNIS_ASSETS_DESTINATION_DIR}
     DEPENDS ${SPIRV_BINARY_FILES} ${IGNIS_ASSETS_SOURCE_DIR}
     COMMENT "Copying '${IGNIS_ASSETS_SOURCE_DIR}' folder to '${IGNIS_ASSETS_DESTINATION_DIR}'"
 )
 
-add_dependencies(IgnisEditor RTRApplicationAssets)
+add_dependencies(IgnisEditor IgnisEditorAssets)
 
 file(GLOB_RECURSE IGNIS_ASSETS_FILES ${IGNIS_ASSETS_SOURCE_DIR}/*)
 source_group(TREE ${IGNIS_ASSETS_SOURCE_DIR} PREFIX Assets FILES ${IGNIS_ASSETS_FILES})
-target_sources(RTRApplicationAssets PRIVATE ${IGNIS_ASSETS_FILES})
+target_sources(IgnisEditorAssets PRIVATE ${IGNIS_ASSETS_FILES})
 
-set_property(TARGET RTRApplicationAssets PROPERTY FOLDER "Editor")
+set_property(TARGET IgnisEditorAssets PROPERTY FOLDER "Editor")
 set_property(TARGET IgnisEditor PROPERTY FOLDER "Editor")

@@ -2,15 +2,13 @@
     "name": "ignis",
     "version": "0.0.1",
     "dependencies": [
+        "function2",
+        "gtl",
+        "spdlog",
         "glfw3",
         "glm",
         "stb",
         "fastgltf",
-        "spdlog",
-        "function2",
-        "concurrentqueue",
-        "gtl",
-        "taskflow",
         "shader-slang"
     ]
 }
