@@ -18,6 +18,8 @@ namespace Ignis {
             bool Fullscreen = false;
 
             bool FullscreenMonitorSize = true;
+
+            std::optional<std::string_view> Icon = std::nullopt;
         };
 
        public:

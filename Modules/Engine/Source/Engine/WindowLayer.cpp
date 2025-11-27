@@ -83,6 +83,10 @@ namespace Ignis {
         setStickyMouseButtons(false);
         setLockKeyMods(true);
         setRawMouseMotion(true);
+
+        if (settings.Icon.has_value()) {
+            setIcon(settings.Icon.value());
+        }
     }
 
     WindowLayer::~WindowLayer() {

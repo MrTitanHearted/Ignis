@@ -30,10 +30,9 @@ namespace Ignis {
             {
                 .WindowSettings = WindowLayer::Settings{
                     .Title = "Ignis::Editor",
+                    .Icon  = "Assets/Icons/IgnisEditor.png",
                 },
             });
-
-        m_Engine.getLayer<WindowLayer>()->setIcon("Assets/Icons/IgnisEditor.png");
 
         WindowLayer *window_layer = m_Engine.getLayer<WindowLayer>();
         VulkanLayer *vulkan_layer = m_Engine.getLayer<VulkanLayer>();
