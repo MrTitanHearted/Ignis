@@ -19,19 +19,22 @@ namespace Ignis {
         vk::DescriptorPool getDescriptorPool() const;
         vk::Sampler        getImageSampler() const;
 
-        void readImages(const vk::ArrayProxy<FrameGraph::ImageInfo> &infos);
-        void writeImages(const vk::ArrayProxy<FrameGraph::ImageInfo> &infos);
-        void readBuffers(const vk::ArrayProxy<FrameGraph::BufferInfo> &infos);
-        void writeBuffers(const vk::ArrayProxy<FrameGraph::BufferInfo> &infos);
+        vk::DescriptorSet addFrameImage2D(vk::Image image, vk::ImageView view, const vk::Extent2D &extent);
+
+       private:
+        struct ImageInfo {
+            vk::Image     Handle;
+            vk::ImageView View;
+            vk::Extent2D  Extent;
+
+            vk::DescriptorSet Descriptor;
+        };
 
        private:
         vk::DescriptorPool m_DescriptorPool;
 
         vk::Sampler m_ImageSampler;
 
-        gtl::vector<FrameGraph::ImageInfo>  m_ReadImages;
-        gtl::vector<FrameGraph::ImageInfo>  m_WriteImages;
-        gtl::vector<FrameGraph::BufferInfo> m_ReadBuffers;
-        gtl::vector<FrameGraph::BufferInfo> m_WriteBuffers;
+        gtl::vector<ImageInfo> m_FrameImages;
     };
 }  // namespace Ignis

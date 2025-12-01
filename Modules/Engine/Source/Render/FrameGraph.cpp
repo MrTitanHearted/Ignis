@@ -65,20 +65,20 @@ namespace Ignis {
         return *this;
     }
 
-    FrameGraph::ImageID FrameGraph::importImage3D(
+    FrameGraph::ImageID FrameGraph::importImage(
         const vk::Image       image,
         const vk::ImageView   image_view,
         const vk::Extent3D   &extent,
         const vk::ImageLayout current_layout,
         const vk::ImageLayout final_layout) {
         IGNIS_IF_DEBUG(
-            IGNIS_ASSERT(!m_ImageSet.contains(image), "vk::Image already imported to the frame graph.");
-            IGNIS_ASSERT(!m_ViewSet.contains(image_view), "vk::ImageView already imported to the frame graph.");
-
-            m_ImageSet.insert(image);
-            m_ViewSet.insert(image_view);)
+            IGNIS_ASSERT(!m_ImageMap.contains(static_cast<VkImage>(image)), "vk::Image already imported to the frame graph.");
+            IGNIS_ASSERT(!m_ViewMap.contains(static_cast<VkImageView>(image_view)), "vk::ImageView already imported to the frame graph.");)
 
         const ImageID image_id = m_NextImageID++;
+
+        m_ImageMap[static_cast<VkImage>(image)]         = image_id;
+        m_ViewMap[static_cast<VkImageView>(image_view)] = image_id;
 
         ImageState image_state{};
         image_state.Image  = image;
@@ -93,44 +93,24 @@ namespace Ignis {
         return image_id;
     }
 
-    FrameGraph::ImageID FrameGraph::importImage2D(
+    FrameGraph::ImageID FrameGraph::importImage(
         const vk::Image       image,
         const vk::ImageView   image_view,
         const vk::Extent2D   &extent,
         const vk::ImageLayout current_layout,
         const vk::ImageLayout final_layout) {
-        IGNIS_IF_DEBUG(
-            IGNIS_ASSERT(!m_ImageSet.contains(image), "vk::Image already imported to the frame graph.");
-            IGNIS_ASSERT(!m_ViewSet.contains(image_view), "vk::ImageView already imported to the frame graph.");
-
-            m_ImageSet.insert(image);
-            m_ViewSet.insert(image_view);)
-
-        const ImageID image_id = m_NextImageID++;
-
-        ImageState image_state{};
-        image_state.Image  = image;
-        image_state.View   = image_view;
-        image_state.Extent = vk::Extent3D{extent, 1};
-        image_state.Layout = current_layout;
-
-        m_ImageStates[image_id] = image_state;
-
-        m_FinalImageLayouts[image_id] = final_layout;
-
-        return image_id;
+        return importImage(image, image_view, vk::Extent3D{extent, 1}, current_layout, final_layout);
     }
 
     FrameGraph::BufferID FrameGraph::importBuffer(
         const vk::Buffer buffer,
         const uint64_t   offset,
         const uint64_t   size) {
-        IGNIS_IF_DEBUG(
-            IGNIS_ASSERT(!m_BufferSet.contains(buffer), "vk::Buffer already imported to the frame graph.");
-
-            m_BufferSet.insert(buffer);)
+        IGNIS_IF_DEBUG(IGNIS_ASSERT(!m_BufferMap.contains(static_cast<VkBuffer>(buffer)), "vk::Buffer already imported to the frame graph."));
 
         const BufferID buffer_id = m_NextBufferID++;
+
+        m_BufferMap[static_cast<VkBuffer>(buffer)] = buffer_id;
 
         BufferState buffer_state{};
         buffer_state.Buffer = buffer;
@@ -139,6 +119,21 @@ namespace Ignis {
 
         m_BufferStates[buffer_id] = buffer_state;
         return buffer_id;
+    }
+
+    FrameGraph::ImageID FrameGraph::getImageID(const vk::Image image) const {
+        DIGNIS_ASSERT(m_ImageMap.contains(image), "FrameGraph does not contain this image.");
+        return m_ImageMap.at(image);
+    }
+
+    FrameGraph::ImageID FrameGraph::getImageID(const vk::ImageView view) const {
+        DIGNIS_ASSERT(m_ViewMap.contains(view), "FrameGraph does not contain this image view.");
+        return m_ViewMap.at(view);
+    }
+
+    FrameGraph::BufferID FrameGraph::getBufferID(const vk::Buffer buffer) const {
+        DIGNIS_ASSERT(m_BufferMap.contains(buffer), "FrameGraph does not contain this buffer.");
+        return m_BufferMap.at(buffer);
     }
 
     vk::Image FrameGraph::getImage(const ImageID id) const {
@@ -210,12 +205,11 @@ namespace Ignis {
         m_NextBufferID = 0;
         m_RenderPasses.clear();
 
-        IGNIS_IF_DEBUG(
-            m_ImageSet.clear();
-            m_ViewSet.clear();
-            m_BufferSet.clear();)
+        m_ImageMap.clear();
+        m_ViewMap.clear();
+        m_BufferMap.clear();
 
-        m_SwapchainImageID = importImage2D(
+        m_SwapchainImageID = importImage(
             swapchain_image,
             swapchain_image_view,
             swapchain_extent,

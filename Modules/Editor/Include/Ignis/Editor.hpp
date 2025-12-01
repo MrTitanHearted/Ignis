@@ -23,13 +23,11 @@ namespace Ignis {
         void destroyViewportImage();
 
        private:
-        glm::vec3     m_ViewportClearColor;
         Vulkan::Image m_ViewportImage;
         vk::ImageView m_ViewportImageView;
-        vk::Format    m_ViewportFormat;
         vk::Extent2D  m_ViewportExtent;
+        vk::Format    m_ViewportFormat;
 
-        vk::DescriptorSet   m_ViewportDescriptorSet;
-        FrameGraph::ImageID m_ViewportImageID;
+        glm::vec3 m_ViewportClearColor;
     };
 }  // namespace Ignis

@@ -37,6 +37,7 @@ namespace Ignis {
     }
 
     void Editor::onUI(IUISystem *ui_system) {
+        const auto im_gui_system = static_cast<ImGuiSystem *>(ui_system);
         ImGui::Begin("Ignis::EditorLayer::Toolbox");
 
         ImGui::ColorEdit3("Viewport Clear Color", &m_ViewportClearColor.r);
@@ -56,13 +57,13 @@ namespace Ignis {
             createViewportImage(viewport_size.x, viewport_size.y);
         }
 
-        ImGui::Image(static_cast<const VkDescriptorSet &>(m_ViewportDescriptorSet), viewport_size);
+        ImGui::Image(static_cast<const VkDescriptorSet &>(m_ViewportDescriptor), viewport_size);
 
         ImGui::End();
     }
 
     void Editor::onRender(FrameGraph &frame_graph) {
-        m_ViewportImageID = frame_graph.importImage2D(
+        const FrameGraph::ImageID viewport_image_id = frame_graph.importImage(
             m_ViewportImage.Handle,
             m_ViewportImageView,
             m_ViewportExtent,
@@ -76,7 +77,7 @@ namespace Ignis {
 
         editor_pass
             .setColorAttachments({FrameGraph::Attachment{
-                m_ViewportImageID,
+                viewport_image_id,
                 vk::ClearColorValue{m_ViewportClearColor.r, m_ViewportClearColor.g, m_ViewportClearColor.b, 1.0f},
                 vk::AttachmentLoadOp::eClear,
                 vk::AttachmentStoreOp::eStore,
@@ -85,10 +86,6 @@ namespace Ignis {
             });
 
         frame_graph.addRenderPass(std::move(editor_pass));
-        Engine::Get().getUISystem<ImGuiSystem>()->readImages({FrameGraph::ImageInfo{
-            m_ViewportImageID,
-            vk::PipelineStageFlagBits2::eFragmentShader,
-        }});
     }
 
     void Editor::createViewportImage(const uint32_t width, const uint32_t height) {
@@ -124,17 +121,10 @@ namespace Ignis {
                     vk::AccessFlagBits2::eMemoryRead);
             merger.flushBarriers(command_buffer);
         });
-
-        m_ViewportDescriptorSet = ImGui_ImplVulkan_AddTexture(
-            Engine::Get().getUISystem<ImGuiSystem>()->getImageSampler(),
-            m_ViewportImageView,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
     void Editor::destroyViewportImage() {
         Vulkan::WaitDeviceIdle();
-
-        ImGui_ImplVulkan_RemoveTexture(m_ViewportDescriptorSet);
 
         Vulkan::DestroyImageView(m_ViewportImageView);
         Vulkan::DestroyImage(m_ViewportImage);

@@ -78,19 +78,24 @@ namespace Ignis {
        public:
         ~FrameGraph() = default;
 
-        ImageID importImage3D(
+        ImageID importImage(
             vk::Image           image,
             vk::ImageView       image_view,
             const vk::Extent3D &extent,
             vk::ImageLayout     current_layout,
             vk::ImageLayout     final_layout);
-        ImageID importImage2D(
+        ImageID importImage(
             vk::Image           image,
             vk::ImageView       image_view,
             const vk::Extent2D &extent,
             vk::ImageLayout     current_layout,
             vk::ImageLayout     final_layout);
         BufferID importBuffer(vk::Buffer buffer, uint64_t offset, uint64_t size);
+
+        ImageID getImageID(vk::Image image) const;
+        ImageID getImageID(vk::ImageView view) const;
+
+        BufferID getBufferID(vk::Buffer buffer) const;
 
         vk::Image     getImage(ImageID id) const;
         vk::ImageView getImageView(ImageID id) const;
@@ -149,10 +154,9 @@ namespace Ignis {
         gtl::flat_hash_map<ImageID, ImageState>   m_ImageStates;
         gtl::flat_hash_map<BufferID, BufferState> m_BufferStates;
 
-        IGNIS_IF_DEBUG(
-            gtl::flat_hash_set<VkImage>     m_ImageSet;
-            gtl::flat_hash_set<VkImageView> m_ViewSet;
-            gtl::flat_hash_set<VkBuffer>    m_BufferSet;)
+        gtl::flat_hash_map<VkImage, ImageID>     m_ImageMap;
+        gtl::flat_hash_map<VkImageView, ImageID> m_ViewMap;
+        gtl::flat_hash_map<VkBuffer, BufferID>   m_BufferMap;
 
         gtl::flat_hash_map<ImageID, vk::ImageLayout> m_FinalImageLayouts;
 

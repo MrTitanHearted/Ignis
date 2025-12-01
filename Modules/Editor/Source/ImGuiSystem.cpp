@@ -95,6 +95,12 @@ namespace Ignis {
         const ImGuiID dock_space_id = ImGui::GetID("Ignis::ImGuiLayer::DockSpace");
         ImGui::DockSpace(dock_space_id);
         ImGui::End();
+
+        Vulkan::WaitDeviceIdle();
+        for (const auto &frame_image : m_FrameImages)
+            ImGui_ImplVulkan_RemoveTexture(frame_image.Descriptor);
+
+        m_FrameImages.clear();
     }
 
     void ImGuiSystem::end() {
@@ -113,11 +119,16 @@ namespace Ignis {
             {1.0f, 0.0f, 0.0f, 1.0f},
         };
 
+        gtl::vector<FrameGraph::ImageInfo> read_images{};
+        read_images.reserve(m_FrameImages.size());
+
+        for (const auto &frame_image : m_FrameImages) {
+            const FrameGraph::ImageID image_id = frame_graph.getImageID(frame_image.Handle);
+            read_images.push_back(FrameGraph::ImageInfo{image_id, vk::PipelineStageFlagBits2::eFragmentShader});
+        }
+
         imgui_pass
-            .readImages(m_ReadImages)
-            .writeImages(m_WriteImages)
-            .readBuffers(m_ReadBuffers)
-            .writeBuffers(m_WriteBuffers)
+            .readImages(read_images)
             .setColorAttachments({FrameGraph::Attachment{
                 frame_graph.getSwapchainImageID(),
                 vk::ClearValue{},
@@ -139,31 +150,13 @@ namespace Ignis {
         return m_ImageSampler;
     }
 
-    void ImGuiSystem::readImages(const vk::ArrayProxy<FrameGraph::ImageInfo> &infos) {
-        m_ReadImages.insert(
-            std::end(m_ReadImages),
-            std::begin(infos),
-            std::end(infos));
-    }
-
-    void ImGuiSystem::writeImages(const vk::ArrayProxy<FrameGraph::ImageInfo> &infos) {
-        m_WriteImages.insert(
-            std::end(m_WriteImages),
-            std::begin(infos),
-            std::end(infos));
-    }
-
-    void ImGuiSystem::readBuffers(const vk::ArrayProxy<FrameGraph::BufferInfo> &infos) {
-        m_ReadBuffers.insert(
-            std::end(m_ReadBuffers),
-            std::begin(infos),
-            std::end(infos));
-    }
-
-    void ImGuiSystem::writeBuffers(const vk::ArrayProxy<FrameGraph::BufferInfo> &infos) {
-        m_WriteBuffers.insert(
-            std::end(m_WriteBuffers),
-            std::begin(infos),
-            std::end(infos));
+    vk::DescriptorSet ImGuiSystem::addFrameImage2D(
+        const vk::Image     image,
+        const vk::ImageView view,
+        const vk::Extent2D &extent) {
+        const vk::DescriptorSet descriptor =
+            ImGui_ImplVulkan_AddTexture(m_ImageSampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        m_FrameImages.push_back(ImageInfo{image, view, extent, descriptor});
+        return descriptor;
     }
 }  // namespace Ignis
