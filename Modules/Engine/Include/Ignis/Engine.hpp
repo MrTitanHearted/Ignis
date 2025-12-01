@@ -1,27 +1,27 @@
 #pragma once
 
 #include <Ignis/Core.hpp>
-#include <Ignis/ECS.hpp>
 #include <Ignis/Assets.hpp>
+#include <Ignis/Window.hpp>
+#include <Ignis/Vulkan.hpp>
+#include <Ignis/Render.hpp>
 
-#include <Ignis/Engine/Event.hpp>
+#include <Ignis/Engine/IUISystem.hpp>
 #include <Ignis/Engine/Layer.hpp>
-
-#include <Ignis/Engine/WindowLayer.hpp>
-#include <Ignis/Engine/VulkanLayer.hpp>
-#include <Ignis/Engine/RenderLayer.hpp>
 
 namespace Ignis {
     class Engine {
        public:
         struct Settings {
-            WindowLayer::Settings WindowSettings{};
-            VulkanLayer::Settings VulkanSettings{};
-            RenderLayer::Settings RenderSettings{};
+            Window::Settings WindowSettings{};
+            Vulkan::Settings VulkanSettings{};
+            Render::Settings RenderSettings{};
+
+            std::unique_ptr<IUISystem> UISystem = nullptr;
         };
 
        public:
-        static void Initialize(Engine *engine, const Settings &settings);
+        static void Initialize(Engine *engine, Settings &settings);
         static void Shutdown();
 
         static Engine &Get();
@@ -33,28 +33,48 @@ namespace Ignis {
         void run();
         void stop();
 
-        static void raiseEvent(AEvent &event);
+        bool isRunning() const;
 
-        static bool isRunning();
+        IUISystem *getUISystem() const;
 
-        template <typename TLayer, typename... Args, typename = std::enable_if_t<std::is_base_of_v<ILayer, TLayer>>>
-        void pushLayer(Args &&...args) {
-            const std::type_index type = typeid(TLayer);
-
-            m_LayerLookUp[type] = m_LayerStack.size();
-            m_LayerTypes.push_back(type);
-            m_LayerStack.push_back(std::make_unique<TLayer>(std::forward<Args>(args)...));
+        template <typename TUISystem>
+            requires(std::is_base_of_v<IUISystem, TUISystem>)
+        TUISystem *getUISystem() const {
+            DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized.");
+            IUISystem *ui_system = m_UISystem.get();
+            return dynamic_cast<TUISystem *>(ui_system);
         }
 
-        template <typename TLayer, typename = std::enable_if_t<std::is_base_of_v<ILayer, TLayer>>>
+        template <typename TLayer, typename... Args>
+            requires(std::is_base_of_v<ALayer, TLayer>)
+        TLayer *pushLayer(Args &&...args) {
+            DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized.");
+            const std::type_index layer_type = typeid(TLayer);
+            DIGNIS_ASSERT(
+                !m_LayerLookUp.contains(layer_type),
+                "Ignis::Engine::pushLayer<{}>: Layer already exists.",
+                layer_type.name());
+
+            m_LayerLookUp[layer_type] = m_LayerStack.size();
+            m_LayerTypes.emplace_back(layer_type);
+            m_LayerStack.emplace_back(std::make_unique<TLayer>(std::forward<Args>(args)...));
+
+            return static_cast<TLayer *>(m_LayerStack.back().get());
+        }
+
+        template <typename TLayer>
+            requires(std::is_base_of_v<ALayer, TLayer>)
         TLayer *getLayer() {
-            const std::type_index type = typeid(TLayer);
+            DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized.");
+            const std::type_index layer_type = typeid(TLayer);
 
-            const auto iter = m_LayerLookUp.find(type);
-            if (iter == m_LayerLookUp.end())
+            const auto it = m_LayerLookUp.find(layer_type);
+            if (it == std::end(m_LayerLookUp)) {
+                DIGNIS_LOG_ENGINE_WARN("Ignis::Engine::getLayer<{}>: Layer not pushed.", layer_type.name());
                 return nullptr;
+            }
 
-            return static_cast<TLayer *>(m_LayerStack[iter->second].get());
+            return static_cast<TLayer *>(m_LayerStack[it->second].get());
         }
 
        private:
@@ -69,12 +89,18 @@ namespace Ignis {
         Timer  m_Timer;
         double m_DeltaTime;
 
-        std::vector<std::unique_ptr<ILayer>>        m_LayerStack;
-        std::vector<std::type_index>                m_LayerTypes;
+        Window m_Window;
+        Vulkan m_Vulkan;
+        Render m_Render;
+
+        std::unique_ptr<IUISystem> m_UISystem;
+
+        gtl::vector<std::unique_ptr<ALayer>>        m_LayerStack;
+        gtl::vector<std::type_index>                m_LayerTypes;
         gtl::flat_hash_map<std::type_index, size_t> m_LayerLookUp;
 
        private:
-        friend class ILayer;
+        friend class ALayer;
 
        private:
         static Engine *s_pInstance;
@@ -82,3 +108,5 @@ namespace Ignis {
         IGNIS_IF_DEBUG(static State s_State;)
     };
 }  // namespace Ignis
+
+#include <Ignis/Engine/LayerImpl.hpp>

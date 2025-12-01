@@ -2,22 +2,34 @@
 
 #include <Ignis/Engine.hpp>
 
-#include <Ignis/Editor/ImGuiLayer.hpp>
-#include <Ignis/Editor/Layer.hpp>
-
 namespace Ignis {
-    class Editor {
+    class Editor final : public ILayer<Editor> {
        public:
-        Editor()  = default;
-        ~Editor() = default;
+        struct Settings {
+        };
 
-        void initialize(int32_t argc, const char **argv);
-        void release();
+       public:
+        static bool OnWindowClose(const WindowCloseEvent &);
+        static bool OnWindowKeyInput(const WindowKeyEvent &event);
 
-        void run();
+       public:
+        explicit Editor(const Settings &settings);
+        ~Editor() override;
+
+        void onUI(IUISystem *ui_system) override;
+        void onRender(FrameGraph &frame_graph) override;
+
+        void createViewportImage(uint32_t width, uint32_t height);
+        void destroyViewportImage();
 
        private:
-        Logger m_Logger;
-        Engine m_Engine;
+        glm::vec3     m_ViewportClearColor;
+        Vulkan::Image m_ViewportImage;
+        vk::ImageView m_ViewportImageView;
+        vk::Format    m_ViewportFormat;
+        vk::Extent2D  m_ViewportExtent;
+
+        vk::DescriptorSet   m_ViewportDescriptorSet;
+        FrameGraph::ImageID m_ViewportImageID;
     };
 }  // namespace Ignis

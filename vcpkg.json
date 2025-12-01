@@ -8,7 +8,7 @@
         "glfw3",
         "glm",
         "stb",
-        "fastgltf",
-        "shader-slang"
+        "assimp",
+        "entt"
     ]
 }

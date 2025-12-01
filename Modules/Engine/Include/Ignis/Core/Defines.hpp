@@ -1,5 +1,15 @@
 #pragma once
 
+#include <cstring>
+#include <cstdint>
+#include <cstdlib>
+#include <cstdarg>
+#include <cstdio>
+
+#if !defined(IGNIS_PROJECT_ROOT_DIR)
+#define IGNIS_PROJECT_ROOT_DIR ""
+#endif
+
 #define IGNIS_RELATIVE_FILE_ (&__FILE__[std::strlen(IGNIS_PROJECT_ROOT_DIR) + 1])
 
 #if defined(_WIN32) || defined(_WIN64)

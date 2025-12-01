@@ -1,71 +1,144 @@
 #include <Ignis/Editor.hpp>
-
-#include <spdlog/sinks/basic_file_sink.h>
+#include <Ignis/ImGuiSystem.hpp>
 
 namespace Ignis {
-    void Editor::initialize(
-        const int32_t argc,
-        const char  **argv) {
-        (void)argc;
-        (void)argv;
+    bool Editor::OnWindowClose(const WindowCloseEvent &) {
+        Engine::Get().stop();
+        return false;
+    }
 
-        Logger::Settings logger_settings{};
-        logger_settings.ApplicationLogName = "EDITOR";
-#ifdef IGNIS_BUILD_TYPE_DEBUG
-        logger_settings.EngineLogLevel      = spdlog::level::trace;
-        logger_settings.ApplicationLogLevel = spdlog::level::trace;
-#else
-        logger_settings.EngineLogLevel      = spdlog::level::err;
-        logger_settings.ApplicationLogLevel = spdlog::level::warn;
-#endif
+    bool Editor::OnWindowKeyInput(const WindowKeyEvent &event) {
+        if (KeyAction::ePress != event.Action)
+            return false;
 
-        const spdlog::sink_ptr editor_sink =
-            logger_settings.ApplicationSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>(
-                "IGNIS_EDITOR.log", true));
-        editor_sink->set_pattern(Logger::GetFileSinkPattern());
+        if (KeyCode::eF == event.Key)
+            if (Window::IsFullscreen())
+                Window::MakeWindowed();
+            else
+                Window::MakeFullscreen();
 
-        Logger::Initialize(&m_Logger, logger_settings);
-        Engine::Initialize(
-            &m_Engine,
-            {
-                .WindowSettings = WindowLayer::Settings{
-                    .Title = "Ignis::Editor",
-                },
+        return false;
+    }
+
+    Editor::Editor(const Settings &settings) {
+        attachCallback<WindowCloseEvent>(&Editor::OnWindowClose);
+        attachCallback<WindowKeyEvent>(&Editor::OnWindowKeyInput);
+
+        m_ViewportClearColor = glm::vec3{0.0f};
+
+        createViewportImage(1, 1);
+
+        DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor attached");
+    }
+
+    Editor::~Editor() {
+        destroyViewportImage();
+        DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor detached");
+    }
+
+    void Editor::onUI(IUISystem *ui_system) {
+        ImGui::Begin("Ignis::EditorLayer::Toolbox");
+
+        ImGui::ColorEdit3("Viewport Clear Color", &m_ViewportClearColor.r);
+
+        ImGui::End();
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGui::Begin("Ignis::EditorLayer::Viewport");
+        ImGui::PopStyleVar(2);
+
+        const ImVec2 viewport_size = ImGui::GetContentRegionAvail();
+
+        if (static_cast<uint32_t>(viewport_size.x) != m_ViewportExtent.width ||
+            static_cast<uint32_t>(viewport_size.y) != m_ViewportExtent.height) {
+            destroyViewportImage();
+            createViewportImage(viewport_size.x, viewport_size.y);
+        }
+
+        ImGui::Image(static_cast<const VkDescriptorSet &>(m_ViewportDescriptorSet), viewport_size);
+
+        ImGui::End();
+    }
+
+    void Editor::onRender(FrameGraph &frame_graph) {
+        m_ViewportImageID = frame_graph.importImage2D(
+            m_ViewportImage.Handle,
+            m_ViewportImageView,
+            m_ViewportExtent,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        FrameGraph::RenderPass editor_pass{
+            "Ignis::EditorLayer::RenderPass",
+            {m_ViewportClearColor.r, m_ViewportClearColor.g, m_ViewportClearColor.b, 1.0f},
+        };
+
+        editor_pass
+            .setColorAttachments({FrameGraph::Attachment{
+                m_ViewportImageID,
+                vk::ClearColorValue{m_ViewportClearColor.r, m_ViewportClearColor.g, m_ViewportClearColor.b, 1.0f},
+                vk::AttachmentLoadOp::eClear,
+                vk::AttachmentStoreOp::eStore,
+            }})
+            .setExecute([](const vk::CommandBuffer) {
             });
 
-        m_Engine.getLayer<WindowLayer>()->setIcon("Assets/Icons/IgnisEditor.png");
-
-        WindowLayer *window_layer = m_Engine.getLayer<WindowLayer>();
-        VulkanLayer *vulkan_layer = m_Engine.getLayer<VulkanLayer>();
-        RenderLayer *render_layer = m_Engine.getLayer<RenderLayer>();
-
-        m_Engine.pushLayer<ImGuiLayer>(
-            window_layer,
-            vulkan_layer,
-            render_layer,
-            ImGuiLayer::Settings{});
-
-        ImGuiLayer *im_gui_layer = m_Engine.getLayer<ImGuiLayer>();
-
-        m_Engine.pushLayer<EditorLayer>(
-            vulkan_layer,
-            render_layer,
-            im_gui_layer,
-            EditorLayer::Settings{});
-
-        DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor initialized");
+        frame_graph.addRenderPass(std::move(editor_pass));
+        Engine::Get().getUISystem<ImGuiSystem>()->readImages({FrameGraph::ImageInfo{
+            m_ViewportImageID,
+            vk::PipelineStageFlagBits2::eFragmentShader,
+        }});
     }
 
-    void Editor::release() {
-        DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor released");
+    void Editor::createViewportImage(const uint32_t width, const uint32_t height) {
+        m_ViewportFormat = vk::Format::eR32G32B32A32Sfloat;
 
-        m_Engine.stop();
+        m_ViewportExtent
+            .setWidth(width)
+            .setHeight(height);
 
-        Engine::Shutdown();
-        Logger::Shutdown();
+        m_ViewportImage = Vulkan::AllocateImage2D(
+            {},
+            vma::MemoryUsage::eGpuOnly,
+            {},
+            m_ViewportFormat,
+            vk::ImageUsageFlagBits::eColorAttachment |
+                vk::ImageUsageFlagBits::eSampled |
+                vk::ImageUsageFlagBits::eTransferSrc |
+                vk::ImageUsageFlagBits::eTransferDst,
+            m_ViewportExtent);
+
+        m_ViewportImageView = Vulkan::CreateImageColorView2D(m_ViewportImage.Handle, m_ViewportFormat);
+
+        Render::ImmediateSubmit([this](const vk::CommandBuffer command_buffer) {
+            Vulkan::BarrierMerger merger{};
+            merger.put_image_barrier(
+                m_ViewportImage.Handle,
+                vk::ImageLayout::eUndefined,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::PipelineStageFlagBits2::eTopOfPipe,
+                vk::AccessFlagBits2::eMemoryWrite,
+                vk::PipelineStageFlagBits2::eBottomOfPipe,
+                vk::AccessFlagBits2::eMemoryWrite |
+                    vk::AccessFlagBits2::eMemoryRead);
+            merger.flushBarriers(command_buffer);
+        });
+
+        m_ViewportDescriptorSet = ImGui_ImplVulkan_AddTexture(
+            Engine::Get().getUISystem<ImGuiSystem>()->getImageSampler(),
+            m_ViewportImageView,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
-    void Editor::run() {
-        m_Engine.run();
+    void Editor::destroyViewportImage() {
+        Vulkan::WaitDeviceIdle();
+
+        ImGui_ImplVulkan_RemoveTexture(m_ViewportDescriptorSet);
+
+        Vulkan::DestroyImageView(m_ViewportImageView);
+        Vulkan::DestroyImage(m_ViewportImage);
+
+        m_ViewportImageView = nullptr;
     }
 }  // namespace Ignis

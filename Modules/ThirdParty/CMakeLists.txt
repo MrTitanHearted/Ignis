@@ -13,8 +13,8 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(function2 CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
-find_package(fastgltf CONFIG REQUIRED)
-find_package(slang CONFIG REQUIRED)
+find_package(EnTT CONFIG REQUIRED)
+find_package(assimp CONFIG REQUIRED)
 
 set(IGNIS_THIRD_PARTY_IMGUI_HEADERS
         ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imconfig.h
@@ -56,8 +56,8 @@ target_link_libraries(IgnisThirdParty PUBLIC
         Vulkan::Vulkan
         GPUOpen::VulkanMemoryAllocator
         VulkanMemoryAllocator-Hpp::VulkanMemoryAllocator-Hpp
-        fastgltf::fastgltf
-        # slang::slang
+        EnTT::EnTT
+        assimp::assimp
 )
 
 target_include_directories(IgnisThirdParty PUBLIC
