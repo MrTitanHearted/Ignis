@@ -57,7 +57,7 @@ namespace Ignis {
             createViewportImage(viewport_size.x, viewport_size.y);
         }
 
-        ImGui::Image(static_cast<const VkDescriptorSet &>(m_ViewportDescriptor), viewport_size);
+        // ImGui::Image(static_cast<const VkDescriptorSet &>(m_ViewportDescriptor), viewport_size);
 
         ImGui::End();
     }

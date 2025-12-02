@@ -20,7 +20,6 @@ namespace Ignis {
 
         s_pInstance->m_LayerStack.clear();
         s_pInstance->m_LayerLookUp.clear();
-        s_pInstance->m_LayerTypes.clear();
 
         DIGNIS_LOG_ENGINE_INFO("Ignis::Engine Initialized");
     }
@@ -29,10 +28,10 @@ namespace Ignis {
         DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Engine is not initialized");
 
         while (!s_pInstance->m_LayerStack.empty()) {
-            const std::type_index type = s_pInstance->m_LayerTypes.back();
+            const std::type_index type = s_pInstance->m_LayerStack.back()->m_LayerID;
+
             s_pInstance->m_Window.removeListener(type);
             s_pInstance->m_LayerLookUp.erase(type);
-            s_pInstance->m_LayerTypes.pop_back();
             s_pInstance->m_LayerStack.pop_back();
         }
 

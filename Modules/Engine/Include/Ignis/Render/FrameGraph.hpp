@@ -45,11 +45,8 @@ namespace Ignis {
                 const std::array<float, 4> &label_color = {0.0f, 0.0f, 0.0f, 1.0f});
             ~RenderPass() = default;
 
-            RenderPass &readImages(const vk::ArrayProxy<ImageInfo> &images);
-            RenderPass &writeImages(const vk::ArrayProxy<ImageInfo> &images);
-
+            RenderPass &readImages(const vk::ArrayProxy<ImageID> &images);
             RenderPass &readBuffers(const vk::ArrayProxy<BufferInfo> &buffers);
-            RenderPass &writeBuffers(const vk::ArrayProxy<BufferInfo> &buffers);
 
             RenderPass &setColorAttachments(const vk::ArrayProxy<Attachment> &attachments);
             RenderPass &setDepthAttachment(const Attachment &attachment);
@@ -61,13 +58,45 @@ namespace Ignis {
 
             std::array<float, 4> m_LabelColor;
 
+            gtl::vector<ImageID>    m_ReadImages;
+            gtl::vector<BufferInfo> m_ReadBuffers;
+
+            gtl::vector<Attachment>   m_ColorAttachments;
+            std::optional<Attachment> m_DepthAttachment;
+
+            ExecuteFn m_ExecuteFn;
+
+           private:
+            friend class FrameGraph;
+        };
+
+        class ComputePass {
+           public:
+            typedef fu2::function<void(vk::CommandBuffer command_buffer)> ExecuteFn;
+
+           public:
+            explicit ComputePass(
+                std::string_view            label,
+                const std::array<float, 4> &label_color = {0.0f, 0.0f, 0.0f, 1.0f});
+            ~ComputePass() = default;
+
+            ComputePass &readImages(const vk::ArrayProxy<ImageInfo> &images);
+            ComputePass &writeImages(const vk::ArrayProxy<ImageInfo> &images);
+
+            ComputePass &readBuffers(const vk::ArrayProxy<BufferInfo> &buffers);
+            ComputePass &writeBuffers(const vk::ArrayProxy<BufferInfo> &buffers);
+
+            ComputePass &setExecute(const ExecuteFn &execute_fn);
+
+           private:
+            std::string m_Label;
+
+            std::array<float, 4> m_LabelColor;
+
             gtl::vector<ImageInfo>  m_ReadImages;
             gtl::vector<ImageInfo>  m_WriteImages;
             gtl::vector<BufferInfo> m_ReadBuffers;
             gtl::vector<BufferInfo> m_WriteBuffers;
-
-            gtl::vector<Attachment>   m_ColorAttachments;
-            std::optional<Attachment> m_DepthAttachment;
 
             ExecuteFn m_ExecuteFn;
 
@@ -92,6 +121,20 @@ namespace Ignis {
             vk::ImageLayout     final_layout);
         BufferID importBuffer(vk::Buffer buffer, uint64_t offset, uint64_t size);
 
+        ImageID importImageIfNotAdded(
+            vk::Image           image,
+            vk::ImageView       image_view,
+            const vk::Extent3D &extent,
+            vk::ImageLayout     current_layout,
+            vk::ImageLayout     final_layout);
+        ImageID importImageIfNotAdded(
+            vk::Image           image,
+            vk::ImageView       image_view,
+            const vk::Extent2D &extent,
+            vk::ImageLayout     current_layout,
+            vk::ImageLayout     final_layout);
+        BufferID importBufferIfNotAdded(vk::Buffer buffer, uint64_t offset, uint64_t size);
+
         ImageID getImageID(vk::Image image) const;
         ImageID getImageID(vk::ImageView view) const;
 
@@ -105,9 +148,33 @@ namespace Ignis {
 
         ImageID getSwapchainImageID() const;
 
-        void addRenderPass(RenderPass &&render_pass);
+        void addRenderPass(const RenderPass &render_pass);
+        void addComputePass(const ComputePass &compute_pass);
 
        private:
+        struct ImageState {
+            vk::Image       Handle;
+            vk::ImageView   View;
+            vk::ImageLayout Layout;
+            vk::Extent3D    Extent;
+        };
+
+        struct BufferState {
+            vk::Buffer Handle;
+            uint64_t   Offset;
+            uint64_t   Size;
+        };
+
+        enum class PassType {
+            eRender,
+            eCompute,
+        };
+
+        struct PassIndex {
+            PassType Type;
+            uint32_t Index;
+        };
+
         struct ExecutorPass {
             Vulkan::BarrierMerger MemoryBarriers;
             RenderPass::ExecuteFn ExecuteFn;
@@ -116,6 +183,15 @@ namespace Ignis {
         struct Executor {
             gtl::vector<ExecutorPass> Passes;
             Vulkan::BarrierMerger     FinalBarriers;
+        };
+
+        struct ResourceTracker {
+            gtl::flat_hash_map<ImageID, vk::ImageLayout>         LastImageLayout;
+            gtl::flat_hash_map<ImageID, vk::PipelineStageFlags2> LastImageStages;
+            gtl::flat_hash_map<ImageID, vk::AccessFlags2>        LastImageAccess;
+
+            gtl::flat_hash_map<BufferID, vk::PipelineStageFlags2> LastBufferStages;
+            gtl::flat_hash_map<BufferID, vk::AccessFlags2>        LastBufferAccess;
         };
 
        private:
@@ -129,24 +205,16 @@ namespace Ignis {
 
         Executor build();
 
-       private:
-        struct ImageState {
-            vk::Image       Image;
-            vk::ImageView   View;
-            vk::ImageLayout Layout;
-            vk::Extent3D    Extent;
-        };
-
-        struct BufferState {
-            vk::Buffer Buffer;
-            uint64_t   Offset;
-            uint64_t   Size;
-        };
+        ExecutorPass buildRenderPass(ResourceTracker &resource_tracker, const RenderPass &render_pass);
+        ExecutorPass buildComputePass(ResourceTracker &resource_tracker, const ComputePass &compute_pass);
 
        private:
         ImageID m_SwapchainImageID;
 
-        gtl::vector<RenderPass> m_RenderPasses;
+        gtl::vector<RenderPass>  m_RenderPasses;
+        gtl::vector<ComputePass> m_ComputePasses;
+
+        gtl::vector<PassIndex> m_PassIndices;
 
         ImageID  m_NextImageID  = 0;
         BufferID m_NextBufferID = 0;

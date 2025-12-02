@@ -54,6 +54,9 @@ namespace Ignis {
             barrier_merger.flushBarriers(command_buffer);
         });
 
+        s_pInstance->m_RenderPipelines.clear();
+        s_pInstance->m_RenderPipelineLookUp.clear();
+
         Window::Get().addListener<WindowResizeEvent>(
             [](const WindowResizeEvent &event) {
                 const auto &[width, height] = event;
@@ -111,7 +114,12 @@ namespace Ignis {
         Vulkan::WaitForAllFences(fence);
     }
 
-    Render::FrameData &Render::GetCurrentFrameData() {
+    Render::FrameData &Render::GetCurrentFrameDataRef() {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Render is not initialized.");
+        return s_pInstance->m_Frames[s_pInstance->m_FrameIndex];
+    }
+
+    const Render::FrameData &Render::GetCurrentFrameDataConstRef() {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Render is not initialized.");
         return s_pInstance->m_Frames[s_pInstance->m_FrameIndex];
     }
@@ -149,7 +157,7 @@ namespace Ignis {
 
     std::optional<Render::FrameImage> Render::BeginFrame() {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Render is not initialized.");
-        FrameData &frame_data = GetCurrentFrameData();
+        FrameData &frame_data = GetCurrentFrameDataRef();
 
         Vulkan::WaitForAllFences(frame_data.RenderFence);
 
@@ -174,7 +182,7 @@ namespace Ignis {
     bool Render::EndFrame(FrameGraph::Executor &&frame_graph_executor) {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Render is not initialized.");
 
-        const FrameData &frame_data = GetCurrentFrameData();
+        const FrameData &frame_data = GetCurrentFrameDataRef();
 
         const vk::CommandBuffer command_buffer = frame_data.CommandBuffer;
 

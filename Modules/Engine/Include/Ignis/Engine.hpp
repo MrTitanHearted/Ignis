@@ -56,7 +56,6 @@ namespace Ignis {
                 layer_type.name());
 
             m_LayerLookUp[layer_type] = m_LayerStack.size();
-            m_LayerTypes.emplace_back(layer_type);
             m_LayerStack.emplace_back(std::make_unique<TLayer>(std::forward<Args>(args)...));
 
             return static_cast<TLayer *>(m_LayerStack.back().get());
@@ -96,7 +95,6 @@ namespace Ignis {
         std::unique_ptr<IUISystem> m_UISystem;
 
         gtl::vector<std::unique_ptr<ALayer>>        m_LayerStack;
-        gtl::vector<std::type_index>                m_LayerTypes;
         gtl::flat_hash_map<std::type_index, size_t> m_LayerLookUp;
 
        private:

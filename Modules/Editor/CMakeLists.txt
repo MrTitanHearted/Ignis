@@ -53,7 +53,7 @@ if(NOT SLANGC_EXECUTABLE)
     message(FATAL_ERROR "Slang compiler not found. Install slangc and add it to PATH.")
 endif()
 
-file(GLOB_RECURSE IGNIS_EDITOR_SHADERS ${IGNIS_ASSETS_SOURCE_DIR}/*.slang)
+file(GLOB_RECURSE IGNIS_EDITOR_SHADERS ${IGNIS_ASSETS_SOURCE_DIR}/Shaders/*.slang)
 
 set(SPIRV_BINARY_FILES "")
 
