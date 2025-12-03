@@ -91,7 +91,7 @@ struct DrawData {
     uint MeshID;
     uint MaterialID;
 
-    float4x4 Transform;
+    float4x4 Model;
 };
 
 [[vk::push_constant]]

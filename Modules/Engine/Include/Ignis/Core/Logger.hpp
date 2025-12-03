@@ -25,7 +25,7 @@
 #endif
 
 #ifndef IGNIS_LOG_ENGINE_CALL
-    #define IGNIS_LOG_ENGINE_CALL(level, fmt, ...) IGNIS_LOGGER_CALL(::Ignis::Logger::GetEngineLogger(), level, fmt, ##__VA_ARGS__)
+    #define IGNIS_LOG_ENGINE_CALL(level, fmt, ...) IGNIS_LOGGER_CALL(::Ignis::Logger::GetRef().getEngineLogger(), level, fmt, ##__VA_ARGS__)
 #endif
 #ifndef IGNIS_LOG_ENGINE_CRITICAL
     #define IGNIS_LOG_ENGINE_CRITICAL(fmt, ...) IGNIS_LOG_ENGINE_CALL(spdlog::level::critical, fmt, ##__VA_ARGS__)
@@ -47,7 +47,7 @@
 #endif
 
 #ifndef IGNIS_LOG_APPLICATION_CALL
-    #define IGNIS_LOG_APPLICATION_CALL(level, fmt, ...) IGNIS_LOGGER_CALL(Ignis::Logger::GetApplicationLogger(), level, fmt, ##__VA_ARGS__)
+    #define IGNIS_LOG_APPLICATION_CALL(level, fmt, ...) IGNIS_LOGGER_CALL(Ignis::Logger::GetRef().getApplicationLogger(), level, fmt, ##__VA_ARGS__)
 #endif
 #ifndef IGNIS_LOG_APPLICATION_CRITICAL
     #define IGNIS_LOG_APPLICATION_CRITICAL(fmt, ...) IGNIS_LOG_APPLICATION_CALL(spdlog::level::critical, fmt, ##__VA_ARGS__)
@@ -98,7 +98,7 @@
 #endif
 
 #ifndef DIGNIS_LOG_ENGINE_CALL
-    #define DIGNIS_LOG_ENGINE_CALL(level, fmt, ...) DIGNIS_LOGGER_CALL(::Ignis::Logger::GetEngineLogger(), level, fmt, ##__VA_ARGS__)
+    #define DIGNIS_LOG_ENGINE_CALL(level, fmt, ...) DIGNIS_LOGGER_CALL(::Ignis::Logger::GetRef().getEngineLogger(), level, fmt, ##__VA_ARGS__)
 #endif
 #ifndef DIGNIS_LOG_ENGINE_CRITICAL
     #define DIGNIS_LOG_ENGINE_CRITICAL(fmt, ...) DIGNIS_LOG_ENGINE_CALL(spdlog::level::critical, fmt, ##__VA_ARGS__)
@@ -120,7 +120,7 @@
 #endif
 
 #ifndef DIGNIS_LOG_APPLICATION_CALL
-    #define DIGNIS_LOG_APPLICATION_CALL(level, fmt, ...) DIGNIS_LOGGER_CALL(Ignis::Logger::GetApplicationLogger(), level, fmt, ##__VA_ARGS__)
+    #define DIGNIS_LOG_APPLICATION_CALL(level, fmt, ...) DIGNIS_LOGGER_CALL(Ignis::Logger::GetRef().getApplicationLogger(), level, fmt, ##__VA_ARGS__)
 #endif
 #ifndef DIGNIS_LOG_APPLICATION_CRITICAL
     #define DIGNIS_LOG_APPLICATION_CRITICAL(fmt, ...) DIGNIS_LOG_APPLICATION_CALL(spdlog::level::critical, fmt, ##__VA_ARGS__)
@@ -142,7 +142,7 @@
 #endif
 
 #ifndef IGNIS_ASSERT
-    #define IGNIS_ASSERT(condition, ...) Ignis::Logger::Assert((condition), #condition, spdlog::source_loc{IGNIS_RELATIVE_FILE_, __LINE__, SPDLOG_FUNCTION}, ##__VA_ARGS__)
+    #define IGNIS_ASSERT(condition, ...) Ignis::Logger::GetRef().assertImpl((condition), #condition, spdlog::source_loc{IGNIS_RELATIVE_FILE_, __LINE__, SPDLOG_FUNCTION}, ##__VA_ARGS__)
 #endif
 
 #ifndef DIGNIS_ASSERT
@@ -173,21 +173,26 @@ namespace Ignis {
         };
 
        public:
-        static void Initialize(Logger *logger, const Settings &settings);
-        static void Shutdown();
-
-        static std::shared_ptr<spdlog::logger> GetEngineLogger();
-        static std::shared_ptr<spdlog::logger> GetApplicationLogger();
-
-        static std::shared_ptr<spdlog::sinks::sink> GetFileSink();
-        static std::shared_ptr<spdlog::sinks::sink> GetConsoleSink();
+        static Logger &GetRef();
 
         static const std::string &GetFileSinkPattern();
         static const std::string &GetConsoleSinkPattern();
 
        public:
+        Logger()  = default;
+        ~Logger() = default;
+
+        void initialize(const Settings &settings);
+        void shutdown();
+
+        std::shared_ptr<spdlog::logger> getEngineLogger() const;
+        std::shared_ptr<spdlog::logger> getApplicationLogger() const;
+
+        std::shared_ptr<spdlog::sinks::sink> getFileSink() const;
+        std::shared_ptr<spdlog::sinks::sink> getConsoleSink() const;
+
         template <typename... Args>
-        static void Assert(
+        void assertImpl(
             const bool         condition,
             const std::string &conditionStr,
             spdlog::source_loc location,
@@ -197,13 +202,13 @@ namespace Ignis {
             if (condition) return;
 
             if constexpr (sizeof...(args) > 0) {
-                s_pLogger->m_EngineLogger->log(
+                m_EngineLogger->log(
                     location, spdlog::level::critical,
                     "Assertion failed for: '{}' with message: '{}'",
                     conditionStr,
                     formatStr(std::forward<Args>(args)...));
             } else {
-                s_pLogger->m_EngineLogger->log(
+                m_EngineLogger->log(
                     location, spdlog::level::critical,
                     "Assertion failed for: '{}'",
                     conditionStr);
@@ -211,10 +216,6 @@ namespace Ignis {
 
             std::abort();
         }
-
-       public:
-        Logger()  = default;
-        ~Logger() = default;
 
        private:
         IGNIS_IF_DEBUG(class State {

@@ -24,10 +24,7 @@ namespace Ignis {
         };
 
        public:
-        static void Initialize(Window *window, const Settings &settings);
-        static void Shutdown();
-
-        static Window &Get();
+        static Window &GetRef();
 
         static void PollEvents();
         static void WaitEvents();
@@ -99,6 +96,9 @@ namespace Ignis {
        public:
         Window()           = default;
         ~Window() override = default;
+
+        void initialize(const Settings &settings);
+        void shutdown();
 
        private:
         static void GlfwErrorCallback(int32_t error_code, const char *description);

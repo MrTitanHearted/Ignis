@@ -2,12 +2,15 @@
 
 #include <Ignis/Core.hpp>
 #include <Ignis/Assets.hpp>
+#include <Ignis/Camera.hpp>
 #include <Ignis/Window.hpp>
 #include <Ignis/Vulkan.hpp>
 #include <Ignis/Render.hpp>
 
-#include <Ignis/Engine/IUISystem.hpp>
+#include <Ignis/Engine/IGUISystem.hpp>
 #include <Ignis/Engine/Layer.hpp>
+
+#include <Ignis/GPUScenes/BlinnPhong.hpp>
 
 namespace Ignis {
     class Engine {
@@ -17,31 +20,33 @@ namespace Ignis {
             Vulkan::Settings VulkanSettings{};
             Render::Settings RenderSettings{};
 
-            std::unique_ptr<IUISystem> UISystem = nullptr;
+            std::unique_ptr<IGUISystem> UISystem = nullptr;
         };
 
        public:
-        static void Initialize(Engine *engine, Settings &settings);
-        static void Shutdown();
-
-        static Engine &Get();
+        static Engine &GetRef();
 
        public:
         Engine()  = default;
         ~Engine() = default;
+
+        void initialize(Settings &settings);
+        void shutdown();
 
         void run();
         void stop();
 
         bool isRunning() const;
 
-        IUISystem *getUISystem() const;
+        IGUISystem *getUISystem() const;
+
+        FrameGraph &getFrameGraph();
 
         template <typename TUISystem>
-            requires(std::is_base_of_v<IUISystem, TUISystem>)
+            requires(std::is_base_of_v<IGUISystem, TUISystem>)
         TUISystem *getUISystem() const {
             DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized.");
-            IUISystem *ui_system = m_UISystem.get();
+            IGUISystem *ui_system = m_UISystem.get();
             return dynamic_cast<TUISystem *>(ui_system);
         }
 
@@ -92,9 +97,9 @@ namespace Ignis {
         Vulkan m_Vulkan;
         Render m_Render;
 
-        std::unique_ptr<IUISystem> m_UISystem;
+        std::unique_ptr<IGUISystem> m_UISystem;
 
-        gtl::vector<std::unique_ptr<ALayer>>        m_LayerStack;
+        std::vector<std::unique_ptr<ALayer>>        m_LayerStack;
         gtl::flat_hash_map<std::type_index, size_t> m_LayerLookUp;
 
        private:

@@ -5,55 +5,55 @@ namespace Ignis {
 
     IGNIS_IF_DEBUG(Engine::State Engine::s_State{};)
 
-    void Engine::Initialize(Engine *engine, Settings &settings) {
+    Engine &Engine::GetRef() {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized");
+        return *s_pInstance;
+    }
+
+    void Engine::initialize(Settings &settings) {
         DIGNIS_ASSERT(s_pInstance == nullptr, "Ignis::Engine is already initialized");
 
-        s_pInstance = engine;
-        s_pInstance->m_IsRunning.store(false);
+        m_IsRunning.store(false);
 
-        Window::Initialize(&s_pInstance->m_Window, settings.WindowSettings);
-        Vulkan::Initialize(&s_pInstance->m_Vulkan, settings.VulkanSettings);
-        Render::Initialize(&s_pInstance->m_Render, settings.RenderSettings);
+        m_Window.initialize(settings.WindowSettings);
+        m_Vulkan.initialize(settings.VulkanSettings);
+        m_Render.initialize(settings.RenderSettings);
 
-        s_pInstance->m_UISystem = std::move(settings.UISystem);
-        s_pInstance->m_UISystem->initialize();
+        m_UISystem = std::move(settings.UISystem);
+        m_UISystem->initialize();
 
-        s_pInstance->m_LayerStack.clear();
-        s_pInstance->m_LayerLookUp.clear();
+        m_LayerStack.clear();
+        m_LayerLookUp.clear();
 
+        s_pInstance = this;
         DIGNIS_LOG_ENGINE_INFO("Ignis::Engine Initialized");
     }
 
-    void Engine::Shutdown() {
-        DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Engine is not initialized");
+    void Engine::shutdown() {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized");
 
-        while (!s_pInstance->m_LayerStack.empty()) {
-            const std::type_index type = s_pInstance->m_LayerStack.back()->m_LayerID;
+        while (!m_LayerStack.empty()) {
+            const std::type_index type = m_LayerStack.back()->m_LayerID;
 
-            s_pInstance->m_Window.removeListener(type);
-            s_pInstance->m_LayerLookUp.erase(type);
-            s_pInstance->m_LayerStack.pop_back();
+            m_Window.removeListener(type);
+            m_LayerLookUp.erase(type);
+            m_LayerStack.pop_back();
         }
 
-        s_pInstance->m_UISystem->release();
-        s_pInstance->m_UISystem = nullptr;
+        m_UISystem->release();
+        m_UISystem = nullptr;
 
-        Render::Shutdown();
-        Vulkan::Shutdown();
-        Window::Shutdown();
+        m_Render.shutdown();
+        m_Vulkan.shutdown();
+        m_Window.shutdown();
 
         DIGNIS_LOG_ENGINE_INFO("Ignis::Engine Shutdown");
 
         s_pInstance = nullptr;
     }
 
-    Engine &Engine::Get() {
-        DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Engine is not initialized");
-        return *s_pInstance;
-    }
-
     void Engine::run() {
-        DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Engine is not initialized");
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized");
         m_IsRunning.store(true);
         m_DeltaTime = 0.0f;
         m_Timer.start();
@@ -71,47 +71,45 @@ namespace Ignis {
             m_UISystem->begin();
 
             for (const auto &layer : m_LayerStack)
-                layer->onUI(m_UISystem.get());
+                layer->onGUI(m_UISystem.get());
 
             m_UISystem->end();
 
-            std::optional<Render::FrameImage> frame_image_opt = Render::BeginFrame();
-            if (!frame_image_opt.has_value()) {
-                const auto [width, height] = Window::GetSize();
-                Render::Resize(width, height);
+            if (!m_Render.beginFrame()) {
                 continue;
             }
 
-            const auto &[handle, view, extent] = frame_image_opt.value();
-
-            FrameGraph frame_graph{handle, view, extent};
+            FrameGraph &frame_graph = m_Render.getFrameGraph();
 
             for (const auto &layer : m_LayerStack)
                 layer->onRender(frame_graph);
 
             m_UISystem->render(frame_graph);
 
-            if (!Render::EndFrame(frame_graph.build())) {
-                const auto [width, height] = Window::GetSize();
-                Render::Resize(width, height);
+            if (!m_Render.endFrame(frame_graph.endFrame())) {
                 continue;
             }
         }
     }
 
     void Engine::stop() {
-        DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Engine is not initialized");
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized");
         m_IsRunning.store(false);
     }
 
     bool Engine::isRunning() const {
-        DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Engine is not initialized");
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized");
         return m_IsRunning.load();
     }
 
-    IUISystem *Engine::getUISystem() const {
-        DIGNIS_ASSERT(s_pInstance != nullptr, "Ignis::Engine is not initialized");
+    IGUISystem *Engine::getUISystem() const {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized");
         return m_UISystem.get();
+    }
+
+    FrameGraph &Engine::getFrameGraph() {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized");
+        return m_Render.m_FrameGraph;
     }
 
     IGNIS_IF_DEBUG(Engine::State::~State() {

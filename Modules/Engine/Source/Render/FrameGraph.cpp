@@ -7,22 +7,23 @@ namespace Ignis {
         m_Label      = label;
         m_LabelColor = label_color;
 
+        m_ReadImages.clear();
+        m_ReadBuffers.clear();
+
         m_DepthAttachment = std::nullopt;
     }
 
     FrameGraph::RenderPass &FrameGraph::RenderPass::readImages(const vk::ArrayProxy<ImageID> &images) {
-        m_ReadImages.clear();
         m_ReadImages.insert(
-            std::begin(m_ReadImages),
+            std::end(m_ReadImages),
             std::begin(images),
             std::end(images));
         return *this;
     }
 
     FrameGraph::RenderPass &FrameGraph::RenderPass::readBuffers(const vk::ArrayProxy<BufferInfo> &buffers) {
-        m_ReadBuffers.clear();
         m_ReadBuffers.insert(
-            std::begin(m_ReadBuffers),
+            std::end(m_ReadBuffers),
             std::begin(buffers),
             std::end(buffers));
         return *this;
@@ -31,13 +32,13 @@ namespace Ignis {
     FrameGraph::RenderPass &FrameGraph::RenderPass::setColorAttachments(const vk::ArrayProxy<Attachment> &attachments) {
         m_ColorAttachments.clear();
         m_ColorAttachments.insert(
-            std::begin(m_ColorAttachments),
+            std::end(m_ColorAttachments),
             std::begin(attachments),
             std::end(attachments));
         return *this;
     }
 
-    FrameGraph::RenderPass &FrameGraph::RenderPass::setDepthAttachment(const Attachment &attachment) {
+    FrameGraph::RenderPass &FrameGraph::RenderPass::setDepthAttachment(const std::optional<Attachment> &attachment) {
         m_DepthAttachment = attachment;
         return *this;
     }
@@ -53,41 +54,37 @@ namespace Ignis {
         const std::array<float, 4> &label_color) {
         m_Label      = label;
         m_LabelColor = label_color;
-    }
 
-    FrameGraph::ComputePass &FrameGraph::ComputePass::readImages(const vk::ArrayProxy<ImageInfo> &images) {
         m_ReadImages.clear();
-        m_ReadImages.insert(
-            std::begin(m_ReadImages),
-            std::begin(images),
-            std::end(images));
-        return *this;
-    }
-
-    FrameGraph::ComputePass &FrameGraph::ComputePass::writeImages(const vk::ArrayProxy<ImageInfo> &images) {
         m_WriteImages.clear();
-        m_WriteImages.insert(
-            std::begin(m_WriteImages),
-            std::begin(images),
-            std::end(images));
-        return *this;
-    }
+        m_ImageBarriers.clear();
 
-    FrameGraph::ComputePass &FrameGraph::ComputePass::readBuffers(const vk::ArrayProxy<BufferInfo> &buffers) {
         m_ReadBuffers.clear();
-        m_ReadBuffers.insert(
-            std::begin(m_ReadBuffers),
-            std::begin(buffers),
-            std::end(buffers));
+        m_WriteBuffers.clear();
+        m_BufferBarriers.clear();
+    }
+
+    FrameGraph::ComputePass &FrameGraph::ComputePass::readImage(const ImageInfo &info) {
+        m_ImageBarriers.push_back(BarrierInfo{AccessType::eRead, static_cast<uint32_t>(m_ReadImages.size())});
+        m_ReadImages.push_back(info);
         return *this;
     }
 
-    FrameGraph::ComputePass &FrameGraph::ComputePass::writeBuffers(const vk::ArrayProxy<BufferInfo> &buffers) {
-        m_WriteBuffers.clear();
-        m_WriteBuffers.insert(
-            std::begin(m_WriteBuffers),
-            std::begin(buffers),
-            std::end(buffers));
+    FrameGraph::ComputePass &FrameGraph::ComputePass::writeImage(const ImageInfo &info) {
+        m_ImageBarriers.push_back(BarrierInfo{AccessType::eWrite, static_cast<uint32_t>(m_WriteImages.size())});
+        m_WriteImages.push_back(info);
+        return *this;
+    }
+
+    FrameGraph::ComputePass &FrameGraph::ComputePass::readBuffer(const BufferInfo &info) {
+        m_BufferBarriers.push_back(BarrierInfo{AccessType::eRead, static_cast<uint32_t>(m_ReadBuffers.size())});
+        m_ReadBuffers.push_back(info);
+        return *this;
+    }
+
+    FrameGraph::ComputePass &FrameGraph::ComputePass::writeBuffer(const BufferInfo &info) {
+        m_BufferBarriers.push_back(BarrierInfo{AccessType::eWrite, static_cast<uint32_t>(m_WriteBuffers.size())});
+        m_WriteBuffers.push_back(info);
         return *this;
     }
 
@@ -96,9 +93,36 @@ namespace Ignis {
         return *this;
     }
 
+    void FrameGraph::removeImage(const ImageID image) {
+        DIGNIS_ASSERT(m_ImageStates.contains(image), "FrameGraph::removeImage: image {} is not imported.", image);
+
+        const auto handle = m_ImageStates[image].Handle;
+        const auto view   = m_ImageStates[image].View;
+
+        m_ImageMap.erase(handle);
+        m_ViewMap.erase(view);
+
+        m_ImageStates.remove(image);
+
+        m_FreeImageIDs.push_back(image);
+    }
+
+    void FrameGraph::removeBuffer(const BufferID buffer) {
+        DIGNIS_ASSERT(m_BufferStates.contains(buffer), "FrameGraph::removeBuffer: buffer {} is not imported.", buffer);
+
+        const auto handle = m_BufferStates[buffer].Handle;
+
+        m_BufferMap.erase(handle);
+
+        m_BufferStates.remove(buffer);
+
+        m_FreeBufferIDs.push_back(buffer);
+    }
+
     FrameGraph::ImageID FrameGraph::importImage(
         const vk::Image       image,
         const vk::ImageView   image_view,
+        const vk::Format      format,
         const vk::Extent3D   &extent,
         const vk::ImageLayout current_layout,
         const vk::ImageLayout final_layout) {
@@ -106,7 +130,14 @@ namespace Ignis {
             IGNIS_ASSERT(!m_ImageMap.contains(static_cast<VkImage>(image)), "vk::Image already imported to the frame graph.");
             IGNIS_ASSERT(!m_ViewMap.contains(static_cast<VkImageView>(image_view)), "vk::ImageView already imported to the frame graph.");)
 
-        const ImageID image_id = m_NextImageID++;
+        ImageID image_id;
+
+        if (!m_FreeImageIDs.empty()) {
+            image_id = m_FreeImageIDs.back();
+            m_FreeImageIDs.pop_back();
+        } else {
+            image_id = m_NextImageID++;
+        }
 
         m_ImageMap[static_cast<VkImage>(image)]         = image_id;
         m_ViewMap[static_cast<VkImageView>(image_view)] = image_id;
@@ -114,10 +145,11 @@ namespace Ignis {
         ImageState image_state{};
         image_state.Handle = image;
         image_state.View   = image_view;
+        image_state.Format = format;
         image_state.Extent = extent;
         image_state.Layout = current_layout;
 
-        m_ImageStates[image_id] = image_state;
+        m_ImageStates.insert(image_id, image_state);
 
         m_FinalImageLayouts[image_id] = final_layout;
 
@@ -127,10 +159,11 @@ namespace Ignis {
     FrameGraph::ImageID FrameGraph::importImage(
         const vk::Image       image,
         const vk::ImageView   image_view,
+        const vk::Format      format,
         const vk::Extent2D   &extent,
         const vk::ImageLayout current_layout,
         const vk::ImageLayout final_layout) {
-        return importImage(image, image_view, vk::Extent3D{extent, 1}, current_layout, final_layout);
+        return importImage(image, image_view, format, vk::Extent3D{extent, 1}, current_layout, final_layout);
     }
 
     FrameGraph::BufferID FrameGraph::importBuffer(
@@ -139,7 +172,14 @@ namespace Ignis {
         const uint64_t   size) {
         IGNIS_IF_DEBUG(IGNIS_ASSERT(!m_BufferMap.contains(static_cast<VkBuffer>(buffer)), "vk::Buffer already imported to the frame graph."));
 
-        const BufferID buffer_id = m_NextBufferID++;
+        BufferID buffer_id = INVALID_BUFFER_ID;
+
+        if (!m_FreeBufferIDs.empty()) {
+            buffer_id = m_FreeBufferIDs.back();
+            m_FreeBufferIDs.pop_back();
+        } else {
+            buffer_id = m_NextBufferID++;
+        }
 
         m_BufferMap[static_cast<VkBuffer>(buffer)] = buffer_id;
 
@@ -148,32 +188,35 @@ namespace Ignis {
         buffer_state.Offset = offset;
         buffer_state.Size   = size;
 
-        m_BufferStates[buffer_id] = buffer_state;
+        m_BufferStates.insert(buffer_id, buffer_state);
+
         return buffer_id;
     }
 
     FrameGraph::ImageID FrameGraph::importImageIfNotAdded(
         const vk::Image       image,
         const vk::ImageView   image_view,
+        const vk::Format      format,
         const vk::Extent3D   &extent,
         const vk::ImageLayout current_layout,
         const vk::ImageLayout final_layout) {
         if (m_ImageMap.contains(image))
             return m_ImageMap[image];
 
-        return importImage(image, image_view, extent, current_layout, final_layout);
+        return importImage(image, image_view, format, extent, current_layout, final_layout);
     }
 
     FrameGraph::ImageID FrameGraph::importImageIfNotAdded(
         const vk::Image       image,
         const vk::ImageView   image_view,
+        const vk::Format      format,
         const vk::Extent2D   &extent,
         const vk::ImageLayout current_layout,
         const vk::ImageLayout final_layout) {
         if (m_ImageMap.contains(image))
             return m_ImageMap[image];
 
-        return importImage(image, image_view, vk::Extent3D{extent, 1}, current_layout, final_layout);
+        return importImage(image, image_view, format, vk::Extent3D{extent, 1}, current_layout, final_layout);
     }
 
     FrameGraph::BufferID FrameGraph::importBufferIfNotAdded(
@@ -203,22 +246,27 @@ namespace Ignis {
 
     vk::Image FrameGraph::getImage(const ImageID id) const {
         DIGNIS_ASSERT(id < m_NextImageID, "FrameGraph::ImageID is incorrect image id.");
-        return m_ImageStates.at(id).Handle;
+        return m_ImageStates[id].Handle;
     }
 
     vk::ImageView FrameGraph::getImageView(const ImageID id) const {
         DIGNIS_ASSERT(id < m_NextImageID, "FrameGraph::ImageID is incorrect image id.");
-        return m_ImageStates.at(id).View;
+        return m_ImageStates[id].View;
+    }
+
+    vk::Format FrameGraph::getImageFormat(const ImageID id) const {
+        DIGNIS_ASSERT(id < m_NextImageID, "FrameGraph::ImageID is incorrect image id.");
+        return m_ImageStates[id].Format;
     }
 
     vk::Extent3D FrameGraph::getImageExtent(const ImageID id) const {
         DIGNIS_ASSERT(id < m_NextImageID, "FrameGraph::ImageID is incorrect image id.");
-        return m_ImageStates.at(id).Extent;
+        return m_ImageStates[id].Extent;
     }
 
     vk::Buffer FrameGraph::getBuffer(const BufferID id) const {
         DIGNIS_ASSERT(id < m_NextBufferID, "FrameGraph::BufferID is incorrect buffer id.");
-        return m_BufferStates.at(id).Handle;
+        return m_BufferStates[id].Handle;
     }
 
     FrameGraph::ImageID FrameGraph::getSwapchainImageID() const {
@@ -283,34 +331,47 @@ namespace Ignis {
         executor.FinalBarriers.flushBarriers(command_buffer);
     }
 
-    FrameGraph::FrameGraph(
-        const vk::Image     swapchain_image,
-        const vk::ImageView swapchain_image_view,
-        const vk::Extent2D &swapchain_extent) {
+    FrameGraph::FrameGraph() {
+        clear();
+    }
+
+    void FrameGraph::clear() {
+        m_SwapchainImageID = 0;
+
         m_ImageStates.clear();
         m_BufferStates.clear();
 
         m_NextImageID  = 0;
         m_NextBufferID = 0;
 
-        m_RenderPasses.clear();
-        m_ComputePasses.clear();
-        m_PassIndices.clear();
+        m_FreeImageIDs.clear();
+        m_FreeBufferIDs.clear();
 
         m_ImageMap.clear();
         m_ViewMap.clear();
         m_BufferMap.clear();
 
+        m_RenderPasses.clear();
+        m_ComputePasses.clear();
+        m_PassIndices.clear();
+    }
+
+    void FrameGraph::beginFrame(
+        const vk::Image     swapchain_image,
+        const vk::ImageView swapchain_view,
+        const vk::Format    swapchain_format,
+        const vk::Extent2D &swapchain_extent) {
         m_SwapchainImageID = importImage(
             swapchain_image,
-            swapchain_image_view,
+            swapchain_view,
+            swapchain_format,
             swapchain_extent,
             vk::ImageLayout::ePresentSrcKHR,
             vk::ImageLayout::ePresentSrcKHR);
     }
 
-    FrameGraph::Executor FrameGraph::build() {
-        gtl::vector<ExecutorPass> passes{};
+    FrameGraph::Executor FrameGraph::endFrame() {
+        std::vector<ExecutorPass> passes{};
         passes.reserve(m_PassIndices.size());
 
         ResourceTracker resource_tracker{};
@@ -368,6 +429,12 @@ namespace Ignis {
                 resource_tracker.LastImageAccess[image_id] = dst_access;
             }
         }
+
+        m_RenderPasses.clear();
+        m_ComputePasses.clear();
+        m_PassIndices.clear();
+
+        removeImage(m_SwapchainImageID);
 
         return Executor{passes, final_barriers};
     }
@@ -450,7 +517,7 @@ namespace Ignis {
             const auto src_stages = resource_tracker.LastImageStages[attachment.Image];
             const auto src_access = resource_tracker.LastImageAccess[attachment.Image];
 
-            constexpr auto dst_layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+            constexpr auto dst_layout = vk::ImageLayout::eDepthAttachmentOptimal;
             constexpr auto dst_stages = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
                                         vk::PipelineStageFlagBits2::eLateFragmentTests;
 
@@ -505,7 +572,7 @@ namespace Ignis {
             }
         }
 
-        gtl::vector<vk::RenderingAttachmentInfo>   render_pass_color_attachments{};
+        std::vector<vk::RenderingAttachmentInfo>   render_pass_color_attachments{};
         std::optional<vk::RenderingAttachmentInfo> render_pass_depth_attachment = std::nullopt;
 
         vk::Extent2D render_pass_extent{0, 0};
@@ -561,8 +628,8 @@ namespace Ignis {
                 "In a FrameGraph RenderPass, Depth Attachment should be the same as Color Attachments' size");
         }
 
-        RenderPass::ExecuteFn render_pass_execute_fn = render_pass.m_ExecuteFn;
-        RenderPass::ExecuteFn execute_fn =
+        ExecuteFn render_pass_execute_fn = render_pass.m_ExecuteFn;
+        ExecuteFn execute_fn =
             [=](const vk::CommandBuffer command_buffer) mutable {
                 Vulkan::BeginDebugUtilsLabel(command_buffer, render_pass_label, render_pass_label_color);
 
@@ -607,129 +674,145 @@ namespace Ignis {
 
         Vulkan::BarrierMerger barrier_merger{};
 
-        for (const auto &[image_id, stage] : compute_pass.m_ReadImages) {
-            const auto &image_state = m_ImageStates[image_id];
+        for (const auto &[type, index] : compute_pass.m_ImageBarriers) {
+            switch (type) {
+                case ComputePass::AccessType::eRead: {
+                    const auto &[image_id, stage] = compute_pass.m_ReadImages[index];
 
-            const auto src_layout = resource_tracker.LastImageLayout[image_id];
-            const auto src_stage  = resource_tracker.LastImageStages[image_id];
-            const auto src_access = resource_tracker.LastImageAccess[image_id];
+                    const auto &image_state = m_ImageStates[image_id];
 
-            constexpr auto dst_layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                    const auto src_layout = resource_tracker.LastImageLayout[image_id];
+                    const auto src_stage  = resource_tracker.LastImageStages[image_id];
+                    const auto src_access = resource_tracker.LastImageAccess[image_id];
 
-            const auto dst_stages = stage;
+                    constexpr auto dst_layout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-            constexpr auto dst_access =
-                vk::AccessFlagBits2::eShaderRead |
-                vk::AccessFlagBits2::eShaderSampledRead |
-                vk::AccessFlagBits2::eMemoryRead;
+                    const auto dst_stages = stage;
 
-            if (src_layout != dst_layout ||
-                src_stage != dst_stages ||
-                src_access != dst_access) {
-                barrier_merger.put_image_barrier(
-                    image_state.Handle,
-                    src_layout,
-                    dst_layout,
-                    src_stage,
-                    src_access,
-                    dst_stages,
-                    dst_access);
+                    constexpr auto dst_access =
+                        vk::AccessFlagBits2::eShaderRead |
+                        vk::AccessFlagBits2::eShaderSampledRead |
+                        vk::AccessFlagBits2::eMemoryRead;
 
-                resource_tracker.LastImageLayout[image_id] = dst_layout;
-                resource_tracker.LastImageStages[image_id] = dst_stages;
-                resource_tracker.LastImageAccess[image_id] = dst_access;
+                    if (src_layout != dst_layout ||
+                        src_stage != dst_stages ||
+                        src_access != dst_access) {
+                        barrier_merger.put_image_barrier(
+                            image_state.Handle,
+                            src_layout,
+                            dst_layout,
+                            src_stage,
+                            src_access,
+                            dst_stages,
+                            dst_access);
+
+                        resource_tracker.LastImageLayout[image_id] = dst_layout;
+                        resource_tracker.LastImageStages[image_id] = dst_stages;
+                        resource_tracker.LastImageAccess[image_id] = dst_access;
+                    }
+                } break;
+                case ComputePass::AccessType::eWrite: {
+                    const auto &[image_id, stage] = compute_pass.m_WriteImages[index];
+
+                    const auto &image_state = m_ImageStates[image_id];
+
+                    const auto src_layout = resource_tracker.LastImageLayout[image_id];
+                    const auto src_stage  = resource_tracker.LastImageStages[image_id];
+                    const auto src_access = resource_tracker.LastImageAccess[image_id];
+
+                    constexpr auto dst_layout = vk::ImageLayout::eGeneral;
+
+                    const auto dst_stages = stage;
+
+                    constexpr auto dst_access =
+                        vk::AccessFlagBits2::eShaderWrite |
+                        vk::AccessFlagBits2::eMemoryWrite;
+
+                    if (src_layout != dst_layout ||
+                        src_stage != dst_stages ||
+                        src_access != dst_access) {
+                        barrier_merger.put_image_barrier(
+                            image_state.Handle,
+                            src_layout,
+                            dst_layout,
+                            src_stage,
+                            src_access,
+                            dst_stages,
+                            dst_access);
+
+                        resource_tracker.LastImageLayout[image_id] = dst_layout;
+                        resource_tracker.LastImageStages[image_id] = dst_stages;
+                        resource_tracker.LastImageAccess[image_id] = dst_access;
+                    }
+
+                } break;
             }
         }
 
-        for (const auto &[image_id, stage] : compute_pass.m_WriteImages) {
-            const auto &image_state = m_ImageStates[image_id];
+        for (const auto &[type, index] : compute_pass.m_BufferBarriers) {
+            switch (type) {
+                case ComputePass::AccessType::eRead: {
+                    const auto &[buffer_id, offset, size, stages] = compute_pass.m_ReadBuffers[index];
 
-            const auto src_layout = resource_tracker.LastImageLayout[image_id];
-            const auto src_stage  = resource_tracker.LastImageStages[image_id];
-            const auto src_access = resource_tracker.LastImageAccess[image_id];
+                    const auto &buffer_state = m_BufferStates[buffer_id];
 
-            constexpr auto dst_layout = vk::ImageLayout::eGeneral;
+                    const auto src_stages = resource_tracker.LastBufferStages[buffer_id];
+                    const auto src_access = resource_tracker.LastBufferAccess[buffer_id];
 
-            const auto dst_stages = stage;
+                    const auto     dst_stages = stages;
+                    constexpr auto dst_access = vk::AccessFlagBits2::eMemoryRead |
+                                                vk::AccessFlagBits2::eShaderRead |
+                                                vk::AccessFlagBits2::eShaderStorageRead;
 
-            constexpr auto dst_access =
-                vk::AccessFlagBits2::eShaderWrite |
-                vk::AccessFlagBits2::eMemoryWrite;
+                    if (src_stages != dst_stages ||
+                        src_access != dst_access) {
+                        barrier_merger.put_buffer_barrier(
+                            buffer_state.Handle,
+                            offset,
+                            size,
+                            src_stages,
+                            src_access,
+                            dst_stages,
+                            dst_access);
 
-            if (src_layout != dst_layout ||
-                src_stage != dst_stages ||
-                src_access != dst_access) {
-                barrier_merger.put_image_barrier(
-                    image_state.Handle,
-                    src_layout,
-                    dst_layout,
-                    src_stage,
-                    src_access,
-                    dst_stages,
-                    dst_access);
+                        resource_tracker.LastBufferStages[buffer_id] = dst_stages;
+                        resource_tracker.LastBufferAccess[buffer_id] = dst_access;
+                    }
+                } break;
+                case ComputePass::AccessType::eWrite: {
+                    const auto &[buffer_id, offset, size, stages] = compute_pass.m_WriteBuffers[index];
 
-                resource_tracker.LastImageLayout[image_id] = dst_layout;
-                resource_tracker.LastImageStages[image_id] = dst_stages;
-                resource_tracker.LastImageAccess[image_id] = dst_access;
+                    const auto &buffer_state = m_BufferStates[buffer_id];
+
+                    const auto src_stages = resource_tracker.LastBufferStages[buffer_id];
+                    const auto src_access = resource_tracker.LastBufferAccess[buffer_id];
+
+                    const auto     dst_stages = stages;
+                    constexpr auto dst_access = vk::AccessFlagBits2::eMemoryWrite |
+                                                vk::AccessFlagBits2::eShaderWrite;
+
+                    if (src_stages != dst_stages ||
+                        src_access != dst_access) {
+                        barrier_merger.put_buffer_barrier(
+                            buffer_state.Handle,
+                            offset,
+                            size,
+                            src_stages,
+                            src_access,
+                            dst_stages,
+                            dst_access);
+
+                        resource_tracker.LastBufferStages[buffer_id] = dst_stages;
+                        resource_tracker.LastBufferAccess[buffer_id] = dst_access;
+                    }
+
+                } break;
             }
         }
 
-        for (const auto &[buffer_id, offset, size, stages] : compute_pass.m_ReadBuffers) {
-            const auto &buffer_state = m_BufferStates[buffer_id];
+        ExecuteFn compute_pass_execute_fn = compute_pass.m_ExecuteFn;
 
-            const auto src_stages = resource_tracker.LastBufferStages[buffer_id];
-            const auto src_access = resource_tracker.LastBufferAccess[buffer_id];
-
-            const auto     dst_stages = stages;
-            constexpr auto dst_access = vk::AccessFlagBits2::eMemoryRead |
-                                        vk::AccessFlagBits2::eShaderRead |
-                                        vk::AccessFlagBits2::eShaderStorageRead;
-
-            if (src_stages != dst_stages ||
-                src_access != dst_access) {
-                barrier_merger.put_buffer_barrier(
-                    buffer_state.Handle,
-                    offset,
-                    size,
-                    src_stages,
-                    src_access,
-                    dst_stages,
-                    dst_access);
-
-                resource_tracker.LastBufferStages[buffer_id] = dst_stages;
-                resource_tracker.LastBufferAccess[buffer_id] = dst_access;
-            }
-        }
-
-        for (const auto &[buffer_id, offset, size, stages] : compute_pass.m_WriteBuffers) {
-            const auto &buffer_state = m_BufferStates[buffer_id];
-
-            const auto src_stages = resource_tracker.LastBufferStages[buffer_id];
-            const auto src_access = resource_tracker.LastBufferAccess[buffer_id];
-
-            const auto     dst_stages = stages;
-            constexpr auto dst_access = vk::AccessFlagBits2::eMemoryWrite |
-                                        vk::AccessFlagBits2::eShaderWrite;
-
-            if (src_stages != dst_stages ||
-                src_access != dst_access) {
-                barrier_merger.put_buffer_barrier(
-                    buffer_state.Handle,
-                    offset,
-                    size,
-                    src_stages,
-                    src_access,
-                    dst_stages,
-                    dst_access);
-
-                resource_tracker.LastBufferStages[buffer_id] = dst_stages;
-                resource_tracker.LastBufferAccess[buffer_id] = dst_access;
-            }
-        }
-
-        ComputePass::ExecuteFn compute_pass_execute_fn = compute_pass.m_ExecuteFn;
-
-        const ComputePass::ExecuteFn execute_fn =
+        ExecuteFn execute_fn =
             [=](const vk::CommandBuffer command_buffer) mutable {
                 Vulkan::BeginDebugUtilsLabel(command_buffer, compute_pass_label, compute_pass_label_color);
                 compute_pass_execute_fn(command_buffer);

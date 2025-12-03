@@ -6,39 +6,61 @@ namespace Ignis {
 
     IGNIS_IF_DEBUG(Render::State Render::s_State{});
 
-    void Render::Initialize(Render *render, const Settings &settings) {
+    Render &Render::GetRef() {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Render is not initialized.");
+        return *s_pInstance;
+    }
+
+    void Render::ImmediateSubmit(const fu2::function<void(vk::CommandBuffer)> &fn) {
+        GetRef().immediateSubmit(fn);
+    }
+
+    void Render::initialize(const Settings &settings) {
         DIGNIS_ASSERT(nullptr == s_pInstance, "Ignis::Render is already initialized.");
 
-        s_pInstance = render;
+        m_FrameIndex     = 0;
+        m_FramesInFlight = settings.FramesInFlight;
 
-        s_pInstance->m_FrameIndex     = 0;
-        s_pInstance->m_FramesInFlight = settings.FramesInFlight;
+        m_Frames.clear();
+        m_Frames.reserve(m_FramesInFlight);
 
-        s_pInstance->m_Frames.clear();
-        s_pInstance->m_Frames.reserve(s_pInstance->m_FramesInFlight);
-
-        for (uint32_t i = 0; i < s_pInstance->m_FramesInFlight; i++) {
+        for (uint32_t i = 0; i < m_FramesInFlight; i++) {
             FrameData frame_data{};
             frame_data.CommandPool   = Vulkan::CreateCommandPool(vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
             frame_data.CommandBuffer = Vulkan::AllocatePrimaryCommandBuffer(frame_data.CommandPool);
 
-            frame_data.SwapchainSempahore = Vulkan::CreateSemaphore();
+            frame_data.SwapchainSemaphore = Vulkan::CreateSemaphore();
             frame_data.RenderFence        = Vulkan::CreateFence(vk::FenceCreateFlagBits::eSignaled);
 
-            s_pInstance->m_Frames.push_back(frame_data);
+            m_Frames.push_back(frame_data);
         }
 
-        s_pInstance->m_PresentSemaphores.resize(Vulkan::GetSwapchainImageCount());
+        m_PresentSemaphores.resize(Vulkan::GetSwapchainImageCount());
 
-        for (vk::Semaphore &semaphore : s_pInstance->m_PresentSemaphores) {
+        for (vk::Semaphore &semaphore : m_PresentSemaphores) {
             semaphore = Vulkan::CreateSemaphore();
         }
 
-        s_pInstance->m_ImmCommandPool   = Vulkan::CreateCommandPool(vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
-        s_pInstance->m_ImmCommandBuffer = Vulkan::AllocatePrimaryCommandBuffer(s_pInstance->m_ImmCommandPool);
-        s_pInstance->m_ImmFence         = Vulkan::CreateFence(vk::FenceCreateFlagBits::eSignaled);
+        m_ImmCommandPool   = Vulkan::CreateCommandPool(vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
+        m_ImmCommandBuffer = Vulkan::AllocatePrimaryCommandBuffer(m_ImmCommandPool);
+        m_ImmFence         = Vulkan::CreateFence(vk::FenceCreateFlagBits::eSignaled);
 
-        ImmediateSubmit([](const vk::CommandBuffer command_buffer) {
+        m_FrameGraph.clear();
+        m_GPUScenes.clear();
+        m_GPUSceneLookUp.clear();
+
+        Window::GetRef().addListener<WindowResizeEvent>(
+            [this](const WindowResizeEvent &event) {
+                const auto &[width, height] = event;
+                resize(width, height);
+                return false;
+            },
+            typeid(Render));
+
+        s_pInstance = this;
+        DIGNIS_LOG_ENGINE_INFO("Ignis::Render Initialized");
+
+        immediateSubmit([](const vk::CommandBuffer command_buffer) {
             Vulkan::BarrierMerger barrier_merger{};
             for (uint32_t i = 0; i < Vulkan::GetSwapchainImageCount(); i++) {
                 barrier_merger.put_image_barrier(
@@ -53,50 +75,40 @@ namespace Ignis {
             }
             barrier_merger.flushBarriers(command_buffer);
         });
-
-        s_pInstance->m_RenderPipelines.clear();
-        s_pInstance->m_RenderPipelineLookUp.clear();
-
-        Window::Get().addListener<WindowResizeEvent>(
-            [](const WindowResizeEvent &event) {
-                const auto &[width, height] = event;
-                Resize(width, height);
-                return false;
-            },
-            typeid(Render));
-        DIGNIS_LOG_ENGINE_INFO("Ignis::Render Initialized");
     }
 
-    void Render::Shutdown() {
+    void Render::shutdown() {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Render is not initialized.");
-        DIGNIS_VK_CHECK(Vulkan::GetDevice().waitIdle());
+        Vulkan::WaitDeviceIdle();
 
-        Window::Get().removeListener(typeid(Render));
+        Window::GetRef().removeListener(typeid(Render));
 
-        for (const vk::Semaphore &semaphore : s_pInstance->m_PresentSemaphores) {
+        for (const vk::Semaphore &semaphore : m_PresentSemaphores) {
             Vulkan::DestroySemaphore(semaphore);
         }
 
-        Vulkan::DestroyFence(s_pInstance->m_ImmFence);
-        Vulkan::DestroyCommandPool(s_pInstance->m_ImmCommandPool);
+        Vulkan::DestroyFence(m_ImmFence);
+        Vulkan::DestroyCommandPool(m_ImmCommandPool);
 
-        for (const FrameData &frame_data : s_pInstance->m_Frames) {
+        for (const FrameData &frame_data : m_Frames) {
             Vulkan::DestroyFence(frame_data.RenderFence);
-            Vulkan::DestroySemaphore(frame_data.SwapchainSempahore);
+            Vulkan::DestroySemaphore(frame_data.SwapchainSemaphore);
             Vulkan::DestroyCommandPool(frame_data.CommandPool);
         }
+
+        m_Frames.clear();
 
         DIGNIS_LOG_ENGINE_INFO("Ignis::Render Shutdown");
 
         s_pInstance = nullptr;
     }
 
-    void Render::ImmediateSubmit(fu2::function<void(vk::CommandBuffer)> fn) {
+    void Render::immediateSubmit(fu2::function<void(vk::CommandBuffer)> fn) const {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Render is not initialized.");
 
-        const vk::Fence fence = s_pInstance->m_ImmFence;
+        const vk::Fence fence = m_ImmFence;
 
-        const vk::CommandBuffer command_buffer = s_pInstance->m_ImmCommandBuffer;
+        const vk::CommandBuffer command_buffer = m_ImmCommandBuffer;
 
         Vulkan::ResetFences(fence);
         Vulkan::ResetCommandBuffer(command_buffer);
@@ -114,31 +126,30 @@ namespace Ignis {
         Vulkan::WaitForAllFences(fence);
     }
 
-    Render::FrameData &Render::GetCurrentFrameDataRef() {
+    FrameGraph &Render::getFrameGraph() {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Render is not initialized.");
-        return s_pInstance->m_Frames[s_pInstance->m_FrameIndex];
+        return m_FrameGraph;
     }
 
-    const Render::FrameData &Render::GetCurrentFrameDataConstRef() {
+    Render::FrameData &Render::getCurrentFrameDataRef() {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Render is not initialized.");
-        return s_pInstance->m_Frames[s_pInstance->m_FrameIndex];
+        return m_Frames[s_pInstance->m_FrameIndex];
     }
 
-    void Render::Resize(const uint32_t width, const uint32_t height) {
+    void Render::resize(const uint32_t width, const uint32_t height) {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Render is not initialized.");
-        DIGNIS_VK_CHECK(Vulkan::GetDevice().waitIdle());
-
+        Vulkan::WaitDeviceIdle();
         Vulkan::ResizeSwapchain(width, height);
 
-        for (const vk::Semaphore &semaphore : s_pInstance->m_PresentSemaphores)
+        for (const vk::Semaphore &semaphore : m_PresentSemaphores)
             Vulkan::DestroySemaphore(semaphore);
 
-        s_pInstance->m_PresentSemaphores.resize(Vulkan::GetSwapchainImageCount());
+        m_PresentSemaphores.resize(Vulkan::GetSwapchainImageCount());
 
-        for (vk::Semaphore &semaphore : s_pInstance->m_PresentSemaphores)
+        for (vk::Semaphore &semaphore : m_PresentSemaphores)
             semaphore = Vulkan::CreateSemaphore();
 
-        ImmediateSubmit([](const vk::CommandBuffer command_buffer) {
+        immediateSubmit([](const vk::CommandBuffer command_buffer) {
             Vulkan::BarrierMerger barrier_merger{};
             for (uint32_t i = 0; i < Vulkan::GetSwapchainImageCount(); i++) {
                 barrier_merger.put_image_barrier(
@@ -155,15 +166,15 @@ namespace Ignis {
         });
     }
 
-    std::optional<Render::FrameImage> Render::BeginFrame() {
+    bool Render::beginFrame() {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Render is not initialized.");
-        FrameData &frame_data = GetCurrentFrameDataRef();
+        FrameData &frame_data = m_Frames[m_FrameIndex];
 
         Vulkan::WaitForAllFences(frame_data.RenderFence);
 
-        auto [result, swapchain_image_index] = Vulkan::AcquireNextImage(frame_data.SwapchainSempahore);
+        auto [result, swapchain_image_index] = Vulkan::AcquireNextImage(frame_data.SwapchainSemaphore);
         if (vk::Result::eErrorOutOfDateKHR == result) {
-            return std::nullopt;
+            return false;
         }
         if (vk::Result::eSuboptimalKHR != result)
             DIGNIS_VK_CHECK(result);
@@ -172,17 +183,19 @@ namespace Ignis {
 
         frame_data.SwapchainImageIndex = swapchain_image_index;
 
-        return FrameImage{
+        m_FrameGraph.beginFrame(
             Vulkan::GetSwapchainImage(swapchain_image_index),
             Vulkan::GetSwapchainImageView(swapchain_image_index),
-            Vulkan::GetSwapchainExtent(),
-        };
+            Vulkan::GetSwapchainFormat().format,
+            Vulkan::GetSwapchainExtent());
+
+        return true;
     }
 
-    bool Render::EndFrame(FrameGraph::Executor &&frame_graph_executor) {
+    bool Render::endFrame(FrameGraph::Executor &&frame_graph_executor) {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Render is not initialized.");
 
-        const FrameData &frame_data = GetCurrentFrameDataRef();
+        const FrameData &frame_data = m_Frames[m_FrameIndex];
 
         const vk::CommandBuffer command_buffer = frame_data.CommandBuffer;
 
@@ -194,32 +207,30 @@ namespace Ignis {
 
         Vulkan::EndCommandBuffer(command_buffer);
 
-        const vk::Semaphore frame_present_semaphore = s_pInstance->m_PresentSemaphores[frame_data.SwapchainImageIndex];
+        const vk::Semaphore frame_present_semaphore = m_PresentSemaphores[frame_data.SwapchainImageIndex];
 
         Vulkan::Submit(
             {Vulkan::GetCommandBufferSubmitInfo(command_buffer)},
             {Vulkan::GetSemaphoreSubmitInfo(
                 vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                frame_data.SwapchainSempahore)},
+                frame_data.SwapchainSemaphore)},
             {Vulkan::GetSemaphoreSubmitInfo(
                 vk::PipelineStageFlagBits2::eAllCommands,
                 frame_present_semaphore)},
             frame_data.RenderFence,
             Vulkan::GetGraphicsQueue());
 
-        {
-            const vk::Result result = Vulkan::Present(
-                frame_present_semaphore,
-                frame_data.SwapchainImageIndex);
+        const vk::Result result = Vulkan::Present(
+            frame_present_semaphore,
+            frame_data.SwapchainImageIndex);
 
-            if (vk::Result::eErrorOutOfDateKHR == result)
-                return false;
+        if (vk::Result::eErrorOutOfDateKHR == result)
+            return false;
 
-            if (vk::Result::eSuboptimalKHR != result)
-                DIGNIS_VK_CHECK(result);
-        }
+        if (vk::Result::eSuboptimalKHR != result)
+            DIGNIS_VK_CHECK(result);
 
-        s_pInstance->m_FrameIndex = (s_pInstance->m_FrameIndex + 1) % s_pInstance->m_FramesInFlight;
+        m_FrameIndex = (m_FrameIndex + 1) % m_FramesInFlight;
 
         return true;
     }

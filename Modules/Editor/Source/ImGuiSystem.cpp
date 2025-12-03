@@ -49,7 +49,7 @@ namespace Ignis {
     }
 
     void ImGuiSystem::release() {
-        DIGNIS_VK_CHECK(Vulkan::GetDevice().waitIdle());
+        Vulkan::WaitDeviceIdle();
 
         if (const ImGuiIO &io = ImGui::GetIO();
             io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
@@ -95,12 +95,6 @@ namespace Ignis {
         const ImGuiID dock_space_id = ImGui::GetID("Ignis::ImGuiLayer::DockSpace");
         ImGui::DockSpace(dock_space_id);
         ImGui::End();
-
-        Vulkan::WaitDeviceIdle();
-        for (const auto &frame_image : m_FrameImages)
-            ImGui_ImplVulkan_RemoveTexture(frame_image.Descriptor);
-
-        m_FrameImages.clear();
     }
 
     void ImGuiSystem::end() {
@@ -119,16 +113,8 @@ namespace Ignis {
             {1.0f, 0.0f, 0.0f, 1.0f},
         };
 
-        gtl::vector<FrameGraph::ImageInfo> read_images{};
-        read_images.reserve(m_FrameImages.size());
-
-        for (const auto &frame_image : m_FrameImages) {
-            const FrameGraph::ImageID image_id = frame_graph.getImageID(frame_image.Handle);
-            read_images.push_back(FrameGraph::ImageInfo{image_id, vk::PipelineStageFlagBits2::eFragmentShader});
-        }
-
         imgui_pass
-            .readImages(read_images)
+            .readImages(m_ImageIDs)
             .setColorAttachments({FrameGraph::Attachment{
                 frame_graph.getSwapchainImageID(),
                 vk::ClearValue{},
@@ -139,7 +125,7 @@ namespace Ignis {
                 ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), command_buffer);
             });
 
-        frame_graph.addRenderPass(std::move(imgui_pass));
+        frame_graph.addRenderPass(imgui_pass);
     }
 
     vk::DescriptorPool ImGuiSystem::getDescriptorPool() const {
@@ -150,13 +136,26 @@ namespace Ignis {
         return m_ImageSampler;
     }
 
-    vk::DescriptorSet ImGuiSystem::addFrameImage2D(
-        const vk::Image     image,
-        const vk::ImageView view,
-        const vk::Extent2D &extent) {
-        const vk::DescriptorSet descriptor =
-            ImGui_ImplVulkan_AddTexture(m_ImageSampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        m_FrameImages.push_back(ImageInfo{image, view, extent, descriptor});
-        return descriptor;
+    vk::DescriptorSet ImGuiSystem::addImage2D(const FrameGraph::ImageID id, const vk::ImageView view) {
+        DIGNIS_ASSERT(!m_ImageLookUp.contains(id));
+        m_ImageLookUp[id] = m_ImageIDs.size();
+        m_ImageIDs.push_back(id);
+        return ImGui_ImplVulkan_AddTexture(m_ImageSampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
+
+    void ImGuiSystem::removeImage2D(const FrameGraph::ImageID id, const vk::DescriptorSet set) {
+        DIGNIS_ASSERT(m_ImageLookUp.contains(id));
+        Vulkan::WaitDeviceIdle();
+        ImGui_ImplVulkan_RemoveTexture(set);
+
+        const size_t index = m_ImageLookUp[id];
+
+        m_ImageIDs[index] = m_ImageIDs.back();
+
+        m_ImageLookUp[m_ImageIDs[index]] = index;
+
+        m_ImageIDs.pop_back();
+        m_ImageLookUp.erase(id);
+    }
+
 }  // namespace Ignis

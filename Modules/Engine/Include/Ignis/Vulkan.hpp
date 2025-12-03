@@ -24,9 +24,9 @@ namespace Ignis {
     class Vulkan {
        public:
         struct Settings {
-            gtl::vector<vk::Format> PreferredSurfaceFormats{vk::Format::eB8G8R8A8Unorm, vk::Format::eB8G8R8A8Srgb};
+            std::vector<vk::Format> PreferredSurfaceFormats{vk::Format::eB8G8R8A8Unorm, vk::Format::eB8G8R8A8Srgb};
 
-            gtl::vector<vk::PresentModeKHR> PreferredPresentModes{vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eFifoRelaxed};
+            std::vector<vk::PresentModeKHR> PreferredPresentModes{vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eFifoRelaxed};
 
             uint32_t PreferredImageCount = 3;
 
@@ -57,7 +57,7 @@ namespace Ignis {
         struct VertexLayout {
             vk::VertexInputBindingDescription Binding;
 
-            gtl::vector<vk::VertexInputAttributeDescription> Attributes;
+            std::vector<vk::VertexInputAttributeDescription> Attributes;
         };
 
 #pragma region Command
@@ -90,8 +90,8 @@ namespace Ignis {
             void flushBarriers(vk::CommandBuffer command_buffer);
 
            private:
-            gtl::vector<vk::ImageMemoryBarrier2>  m_ImageBarriers;
-            gtl::vector<vk::BufferMemoryBarrier2> m_BufferBarriers;
+            std::vector<vk::ImageMemoryBarrier2>  m_ImageBarriers;
+            std::vector<vk::BufferMemoryBarrier2> m_BufferBarriers;
         };
 
 #pragma endregion
@@ -203,8 +203,8 @@ namespace Ignis {
            private:
             vk::DescriptorSetLayoutCreateFlags m_Flags;
 
-            gtl::vector<vk::DescriptorSetLayoutBinding> m_Bindings;
-            gtl::vector<vk::DescriptorBindingFlags>     m_BindingFlags;
+            std::vector<vk::DescriptorSetLayoutBinding> m_Bindings;
+            std::vector<vk::DescriptorBindingFlags>     m_BindingFlags;
         };
 
         class DescriptorSetWriter {
@@ -286,11 +286,11 @@ namespace Ignis {
             };
 
            private:
-            gtl::vector<vk::DescriptorImageInfo>  m_ImageInfos;
-            gtl::vector<vk::DescriptorBufferInfo> m_BufferInfos;
+            std::vector<vk::DescriptorImageInfo>  m_ImageInfos;
+            std::vector<vk::DescriptorBufferInfo> m_BufferInfos;
 
-            gtl::vector<Write> m_ImageWrites;
-            gtl::vector<Write> m_BufferWrites;
+            std::vector<Write> m_ImageWrites;
+            std::vector<Write> m_BufferWrites;
         };
 
 #pragma endregion
@@ -329,10 +329,10 @@ namespace Ignis {
             };
 
            private:
-            gtl::vector<ShaderStageInfo> m_ShaderStages;
+            std::vector<ShaderStageInfo> m_ShaderStages;
 
-            gtl::vector<vk::VertexInputBindingDescription>   m_VertexInputBindingDescriptions;
-            gtl::vector<vk::VertexInputAttributeDescription> m_VertexInputAttributeDescriptions;
+            std::vector<vk::VertexInputBindingDescription>   m_VertexInputBindingDescriptions;
+            std::vector<vk::VertexInputAttributeDescription> m_VertexInputAttributeDescriptions;
 
             vk::PipelineInputAssemblyStateCreateInfo m_InputAssembly;
             vk::PipelineRasterizationStateCreateInfo m_Rasterization;
@@ -342,15 +342,12 @@ namespace Ignis {
 
             vk::PipelineColorBlendAttachmentState m_ColorBlendAttachment;
 
-            gtl::vector<vk::Format> m_ColorAttachmentFormats;
+            std::vector<vk::Format> m_ColorAttachmentFormats;
         };
 
 #pragma endregion
 
        public:
-        static void Initialize(Vulkan *vulkan, const Settings &settings);
-        static void Shutdown();
-
         static void ResizeSwapchain(uint32_t width, uint32_t height);
 
         static vk::Instance GetInstance();
@@ -393,6 +390,9 @@ namespace Ignis {
 
         static void WaitDeviceIdle();
 
+        static void CopyMemoryToAllocation(const void *src, vma::Allocation dst, uint64_t dst_offset, uint64_t size);
+        static void CopyAllocationToMemory(vma::Allocation src, uint64_t src_offset, void *dst, uint64_t size);
+
 #pragma region Buffer
         static void DestroyBuffer(const Buffer &buffer);
 
@@ -426,11 +426,21 @@ namespace Ignis {
         static void BeginCommandBuffer(vk::CommandBufferUsageFlags flags, vk::CommandBuffer command_buffer);
         static void EndCommandBuffer(vk::CommandBuffer command_buffer);
 
+        static void BlitImageToImage(
+            vk::Image           src_image,
+            vk::Image           dst_image,
+            const vk::Offset3D &src_offset,
+            const vk::Offset3D &dst_offset,
+            const vk::Extent3D &src_extent,
+            const vk::Extent3D &dst_extent,
+            vk::CommandBuffer   command_buffer);
+
         static void CopyImageToImage(
             vk::Image           src_image,
             vk::Image           dst_image,
-            const vk::Extent3D &src_extent,
-            const vk::Extent3D &dst_extent,
+            const vk::Offset3D &src_offset,
+            const vk::Offset3D &dst_offset,
+            const vk::Extent3D &extent,
             vk::CommandBuffer   command_buffer);
         static void CopyBufferToBuffer(
             vk::Buffer        src_buffer,
@@ -439,6 +449,22 @@ namespace Ignis {
             uint64_t          dst_offset,
             uint64_t          size,
             vk::CommandBuffer command_buffer);
+        static void CopyBufferToImage(
+            vk::Buffer          src_buffer,
+            vk::Image           dst_image,
+            uint64_t            src_offset,
+            const vk::Offset3D &dst_offset,
+            const vk::Extent2D &src_extent,
+            const vk::Extent3D &dst_extent,
+            vk::CommandBuffer   command_buffer);
+        static void CopyImageToBuffer(
+            vk::Image           src_image,
+            vk::Buffer          dst_buffer,
+            const vk::Offset3D &src_offset,
+            uint64_t            dst_offset,
+            const vk::Extent3D &src_extent,
+            const vk::Extent2D &dst_extent,
+            vk::CommandBuffer   command_buffer);
 
         static vk::CommandBufferSubmitInfo GetCommandBufferSubmitInfo(vk::CommandBuffer command_buffer);
 
@@ -588,6 +614,9 @@ namespace Ignis {
         Vulkan()  = default;
         ~Vulkan() = default;
 
+        void initialize(const Settings &settings);
+        void shutdown();
+
        private:
         IGNIS_IF_DEBUG(class State {
            public:
@@ -595,7 +624,7 @@ namespace Ignis {
         });
 
        private:
-        static bool CheckInstanceLayerSupport(const gtl::vector<const char *> &required_instance_layers);
+        static bool CheckInstanceLayerSupport(const std::vector<const char *> &required_instance_layers);
         static bool CheckPhysicalDeviceSwapchainSupport(
             vk::PhysicalDevice  physical_device,
             vk::SurfaceKHR      surface,
@@ -608,9 +637,6 @@ namespace Ignis {
             void                                         *p_userdata);
 
        private:
-        void initialize(const Settings &settings);
-        void release();
-
         void createSwapchain(uint32_t width, uint32_t height);
         void destroySwapchain();
 
@@ -648,8 +674,8 @@ namespace Ignis {
 
         uint32_t m_SwapchainImageCount;
 
-        gtl::vector<vk::Image>     m_SwapchainImages;
-        gtl::vector<vk::ImageView> m_SwapchainImageViews;
+        std::vector<vk::Image>     m_SwapchainImages;
+        std::vector<vk::ImageView> m_SwapchainImageViews;
 
         vma::Allocator m_VmaAllocator;
 

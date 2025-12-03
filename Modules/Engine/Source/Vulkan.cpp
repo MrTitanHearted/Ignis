@@ -9,25 +9,6 @@ namespace Ignis {
 
     IGNIS_IF_DEBUG(Vulkan::State Vulkan::s_State{});
 
-    void Vulkan::Initialize(Vulkan *vulkan, const Settings &settings) {
-        DIGNIS_ASSERT(nullptr == s_pInstance, "Ignis::Vulkan is already initialized.");
-
-        s_pInstance = vulkan;
-
-        s_pInstance->initialize(settings);
-
-        DIGNIS_LOG_ENGINE_INFO("Ignis::Vulkan Initialized");
-    }
-
-    void Vulkan::Shutdown() {
-        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
-
-        s_pInstance->release();
-
-        DIGNIS_LOG_ENGINE_INFO("Ignis::Vulkan Shutdown");
-        s_pInstance = nullptr;
-    }
-
     void Vulkan::ResizeSwapchain(const uint32_t width, const uint32_t height) {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
         s_pInstance->createSwapchain(width, height);
@@ -161,7 +142,222 @@ namespace Ignis {
         DIGNIS_VK_CHECK(s_pInstance->m_Device.waitIdle());
     }
 
-    bool Vulkan::CheckInstanceLayerSupport(const gtl::vector<const char *> &required_instance_layers) {
+    void Vulkan::CopyMemoryToAllocation(const void *src, const vma::Allocation dst, const uint64_t dst_offset, const uint64_t size) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        DIGNIS_VK_CHECK(s_pInstance->m_VmaAllocator.copyMemoryToAllocation(src, dst, dst_offset, size));
+    }
+
+    void Vulkan::CopyAllocationToMemory(const vma::Allocation src, const uint64_t src_offset, void *dst, const uint64_t size) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        DIGNIS_VK_CHECK(s_pInstance->m_VmaAllocator.copyAllocationToMemory(src, src_offset, dst, size));
+    }
+
+    void Vulkan::initialize(const Settings &settings) {
+        DIGNIS_ASSERT(nullptr == s_pInstance, "Ignis::Vulkan is already initialized.");
+
+        uint32_t glfw_required_extensions_count = 0;
+
+        const char **glfw_required_extensions = glfwGetRequiredInstanceExtensions(&glfw_required_extensions_count);
+
+        std::vector<const char *> instance_extensions{
+            glfw_required_extensions,
+            glfw_required_extensions + glfw_required_extensions_count,
+        };
+        std::vector<const char *> instance_layers{};
+
+        instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#if defined(IGNIS_BUILD_TYPE_DEBUG)
+        if (settings.ValidationLayers)
+            instance_layers.push_back("VK_LAYER_KHRONOS_validation");
+#endif
+
+        const std::vector<const char *> device_extensions{
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        };
+
+        IGNIS_ASSERT(CheckInstanceLayerSupport(instance_layers),
+                     "This Vulkan Instance does not support required layers");
+
+        vk::ApplicationInfo vk_application_info{};
+        vk_application_info
+            .setPApplicationName("Ignis::Vulkan")
+            .setPEngineName("Ignis::Engine")
+            .setApiVersion(VK_API_VERSION_1_4)
+            .setApplicationVersion(VK_MAKE_VERSION(1, 0, 0));
+
+        vk::InstanceCreateInfo vk_instance_create_info{};
+        vk_instance_create_info
+            .setPApplicationInfo(&vk_application_info)
+            .setPEnabledExtensionNames(instance_extensions)
+            .setPEnabledLayerNames(instance_layers);
+
+#if defined(IGNIS_BUILD_TYPE_DEBUG)
+        vk::DebugUtilsMessengerCreateInfoEXT vk_debug_messenger_create_info{};
+
+        vk_debug_messenger_create_info
+            .setMessageSeverity(
+                // vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+                // vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+                vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+                vk::DebugUtilsMessageSeverityFlagBitsEXT::eError)
+            .setMessageType(vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+                            vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+                            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance)
+            .setPUserData(this)
+            .setPfnUserCallback(reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(DebugUtilsMessengerCallback));
+
+        vk_instance_create_info.setPNext(&vk_debug_messenger_create_info);
+#endif
+
+        {
+            auto [result, vk_instance] = vk::createInstance(vk_instance_create_info);
+            IGNIS_VK_CHECK(result);
+            m_Instance = vk_instance;
+        }
+
+        m_DynamicLoader = vk::detail::DispatchLoaderDynamic{m_Instance, vkGetInstanceProcAddr};
+
+#if defined(IGNIS_BUILD_TYPE_DEBUG)
+        IGNIS_VK_CHECK(m_Instance.createDebugUtilsMessengerEXT(
+            &vk_debug_messenger_create_info,
+            nullptr,
+            &m_DebugMessenger,
+            m_DynamicLoader));
+#endif
+
+        VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
+
+        IGNIS_VK_CHECK(glfwCreateWindowSurface(m_Instance, Window::GetHandle(), nullptr, &vk_surface));
+        m_Surface = vk_surface;
+
+        selectPhysicalDevice(settings.SurfaceUsageFlags);
+        selectQueueFamilyIndex();
+        selectSwapchainImageCount(settings.PreferredImageCount);
+        selectSwapchainFormat(settings.PreferredSurfaceFormats);
+        selectSwapchainPresentMode(settings.PreferredPresentModes);
+
+        m_SwapchainUsageFlags =
+            vk::ImageUsageFlagBits::eColorAttachment |
+            vk::ImageUsageFlagBits::eTransferSrc |
+            vk::ImageUsageFlagBits::eTransferDst |
+            settings.SurfaceUsageFlags;
+
+        vk::PhysicalDeviceExtendedDynamicState2FeaturesEXT dynamic_state2_features{};
+        vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT  dynamic_state_features{};
+
+        vk::PhysicalDeviceRobustness2FeaturesEXT robustness_features{};
+
+        vk::PhysicalDeviceVulkan13Features vulkan13_features{};
+        vk::PhysicalDeviceVulkan12Features vulkan12_features{};
+        vk::PhysicalDeviceVulkan11Features vulkan11_features{};
+        vk::PhysicalDeviceFeatures2        features{};
+
+        dynamic_state2_features
+            .setExtendedDynamicState2(vk::True);
+        dynamic_state_features
+            .setExtendedDynamicState(vk::True)
+            .setPNext(&dynamic_state2_features);
+        robustness_features
+            .setNullDescriptor(vk::True)
+            .setPNext(&dynamic_state_features);
+        vulkan13_features
+            .setDynamicRendering(vk::True)
+            .setSynchronization2(vk::True)
+            .setPNext(&robustness_features);
+        vulkan12_features
+            .setBufferDeviceAddress(vk::True)
+            .setDescriptorIndexing(vk::True)
+            .setRuntimeDescriptorArray(vk::True)
+            .setDescriptorBindingPartiallyBound(vk::True)
+            .setDescriptorBindingSampledImageUpdateAfterBind(vk::True)
+            .setDescriptorBindingStorageBufferUpdateAfterBind(vk::True)
+            .setDescriptorBindingStorageImageUpdateAfterBind(vk::True)
+            .setDescriptorBindingStorageTexelBufferUpdateAfterBind(vk::True)
+            .setDescriptorBindingUniformBufferUpdateAfterBind(vk::True)
+            .setDescriptorBindingUniformTexelBufferUpdateAfterBind(vk::True)
+            .setDescriptorBindingUpdateUnusedWhilePending(vk::True)
+            .setDescriptorBindingVariableDescriptorCount(vk::True)
+            .setTimelineSemaphore(vk::True)
+            .setPNext(&vulkan13_features);
+        vulkan11_features
+            .setShaderDrawParameters(vk::True)
+            .setPNext(&vulkan12_features);
+        features.setPNext(&vulkan11_features);
+
+        std::vector<float> queue_priorities{};
+        queue_priorities.reserve(3);
+
+        for (uint32_t i = 0; i < m_QueueFamilyQueueCount; i++) {
+            queue_priorities.push_back(1.0f - static_cast<float>(i) / 6.0f);
+        }
+
+        vk::DeviceQueueCreateInfo vk_queue_create_info{};
+        vk_queue_create_info
+            .setQueueFamilyIndex(m_QueueFamilyIndex)
+            .setQueuePriorities(queue_priorities);
+
+        vk::DeviceCreateInfo vk_device_create_info{};
+        vk_device_create_info
+            .setQueueCreateInfos(vk_queue_create_info)
+            .setPEnabledExtensionNames(device_extensions)
+            .setPNext(&features);
+
+        {
+            auto [result, vk_device] = m_PhysicalDevice.createDevice(vk_device_create_info);
+            IGNIS_VK_CHECK(result);
+            m_Device = vk_device;
+        }
+
+        uint32_t queue_index = 0;
+        m_GraphicsQueue      = m_Device.getQueue(m_QueueFamilyIndex, queue_index);
+        if (queue_index + 1 < m_QueueFamilyQueueCount) queue_index++;
+        m_PresentQueue = m_Device.getQueue(m_QueueFamilyIndex, queue_index);
+        if (queue_index + 1 < m_QueueFamilyQueueCount) queue_index++;
+        m_ComputeQueue = m_Device.getQueue(m_QueueFamilyIndex, queue_index);
+
+        const auto [width, height] = Window::GetSize();
+
+        createSwapchain(width, height);
+
+        vma::AllocatorCreateInfo vma_allocator_create_info{};
+        vma_allocator_create_info
+            .setFlags(vma::AllocatorCreateFlagBits::eBufferDeviceAddress)
+            .setInstance(m_Instance)
+            .setPhysicalDevice(m_PhysicalDevice)
+            .setDevice(m_Device)
+            .setVulkanApiVersion(VK_API_VERSION_1_4);
+
+        auto [result, vma_allocator] = vma::createAllocator(vma_allocator_create_info);
+
+        IGNIS_VK_CHECK(result);
+
+        m_VmaAllocator = vma_allocator;
+
+        s_pInstance = this;
+        DIGNIS_LOG_ENGINE_INFO("Ignis::Vulkan Initialized");
+    }
+
+    void Vulkan::shutdown() {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        destroySwapchain();
+
+        m_VmaAllocator.destroy();
+
+        m_Device.destroy();
+
+        m_Instance.destroySurfaceKHR(m_Surface);
+
+#if defined(IGNIS_BUILD_TYPE_DEBUG)
+        m_Instance.destroyDebugUtilsMessengerEXT(m_DebugMessenger, nullptr, m_DynamicLoader);
+#endif
+
+        m_Instance.destroy();
+
+        DIGNIS_LOG_ENGINE_INFO("Ignis::Vulkan Shutdown");
+        s_pInstance = nullptr;
+    }
+
+    bool Vulkan::CheckInstanceLayerSupport(const std::vector<const char *> &required_instance_layers) {
         auto [result, available_layers] = vk::enumerateInstanceLayerProperties();
         IGNIS_VK_CHECK(result);
 
@@ -236,207 +432,6 @@ namespace Ignis {
         }
 
         return vk::False;
-    }
-
-    void Vulkan::initialize(const Settings &settings) {
-        uint32_t glfw_required_extensions_count = 0;
-
-        const char **glfw_required_extensions = glfwGetRequiredInstanceExtensions(&glfw_required_extensions_count);
-
-        gtl::vector<const char *> instance_extensions{
-            glfw_required_extensions,
-            glfw_required_extensions + glfw_required_extensions_count,
-        };
-        gtl::vector<const char *> instance_layers{};
-
-        instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-#if defined(IGNIS_BUILD_TYPE_DEBUG)
-        if (settings.ValidationLayers)
-            instance_layers.push_back("VK_LAYER_KHRONOS_validation");
-#endif
-
-        const gtl::vector<const char *> device_extensions{
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        };
-
-        IGNIS_ASSERT(CheckInstanceLayerSupport(instance_layers),
-                     "This Vulkan Instance does not support required layers");
-
-        vk::ApplicationInfo vk_application_info{};
-        vk_application_info
-            .setPApplicationName("Ignis::Vulkan")
-            .setPEngineName("Ignis::Engine")
-            .setApiVersion(VK_API_VERSION_1_4)
-            .setApplicationVersion(VK_MAKE_VERSION(1, 0, 0));
-
-        vk::InstanceCreateInfo vk_instance_create_info{};
-        vk_instance_create_info
-            .setPApplicationInfo(&vk_application_info)
-            .setPEnabledExtensionNames(instance_extensions)
-            .setPEnabledLayerNames(instance_layers);
-
-#if defined(IGNIS_BUILD_TYPE_DEBUG)
-        vk::DebugUtilsMessengerCreateInfoEXT vk_debug_messenger_create_info{};
-
-        vk_debug_messenger_create_info
-            .setMessageSeverity(
-                // vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
-                // vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
-                vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-                vk::DebugUtilsMessageSeverityFlagBitsEXT::eError)
-            .setMessageType(vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-                            vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-                            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance)
-            .setPUserData(this)
-            .setPfnUserCallback(reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(DebugUtilsMessengerCallback));
-
-        vk_instance_create_info.setPNext(&vk_debug_messenger_create_info);
-#endif
-
-        {
-            auto [result, vk_instance] = vk::createInstance(vk_instance_create_info);
-            IGNIS_VK_CHECK(result);
-            m_Instance = vk_instance;
-        }
-
-        m_DynamicLoader = vk::detail::DispatchLoaderDynamic{m_Instance, vkGetInstanceProcAddr};
-
-#if defined(IGNIS_BUILD_TYPE_DEBUG)
-        // VkDebugUtilsMessengerEXT vk_debug_utils_messenger = VK_NULL_HANDLE;
-
-        IGNIS_VK_CHECK(m_Instance.createDebugUtilsMessengerEXT(
-            &vk_debug_messenger_create_info,
-            nullptr,
-            &m_DebugMessenger,
-            m_DynamicLoader));
-        //
-        // IGNIS_VK_CHECK(
-        //     ignisVkCreateDebugUtilsMessengerEXT(
-        //         m_Instance,
-        //         &vk_debug_messenger_create_info,
-        //         &vk_debug_utils_messenger));
-        //
-        // m_DebugMessenger = vk_debug_utils_messenger;
-#endif
-
-        VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
-
-        IGNIS_VK_CHECK(glfwCreateWindowSurface(m_Instance, Window::GetHandle(), nullptr, &vk_surface));
-        m_Surface = vk_surface;
-
-        selectPhysicalDevice(settings.SurfaceUsageFlags);
-        selectQueueFamilyIndex();
-        selectSwapchainImageCount(settings.PreferredImageCount);
-        selectSwapchainFormat(settings.PreferredSurfaceFormats);
-        selectSwapchainPresentMode(settings.PreferredPresentModes);
-
-        m_SwapchainUsageFlags =
-            vk::ImageUsageFlagBits::eColorAttachment |
-            vk::ImageUsageFlagBits::eTransferSrc |
-            vk::ImageUsageFlagBits::eTransferDst |
-            settings.SurfaceUsageFlags;
-
-        vk::PhysicalDeviceExtendedDynamicState2FeaturesEXT dynamic_state2_features{};
-        vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT  dynamic_state_features{};
-
-        vk::PhysicalDeviceVulkan13Features vulkan13_features{};
-        vk::PhysicalDeviceVulkan12Features vulkan12_features{};
-        vk::PhysicalDeviceVulkan11Features vulkan11_features{};
-        vk::PhysicalDeviceFeatures2        features{};
-
-        dynamic_state2_features
-            .setExtendedDynamicState2(vk::True);
-        dynamic_state_features
-            .setExtendedDynamicState(vk::True)
-            .setPNext(&dynamic_state2_features);
-        vulkan13_features
-            .setDynamicRendering(vk::True)
-            .setSynchronization2(vk::True)
-            .setPNext(&dynamic_state_features);
-        vulkan12_features
-            .setBufferDeviceAddress(vk::True)
-            .setDescriptorIndexing(vk::True)
-            .setDescriptorBindingPartiallyBound(vk::True)
-            .setDescriptorBindingSampledImageUpdateAfterBind(vk::True)
-            .setDescriptorBindingStorageBufferUpdateAfterBind(vk::True)
-            .setDescriptorBindingStorageImageUpdateAfterBind(vk::True)
-            .setDescriptorBindingStorageTexelBufferUpdateAfterBind(vk::True)
-            .setDescriptorBindingUniformBufferUpdateAfterBind(vk::True)
-            .setDescriptorBindingUniformTexelBufferUpdateAfterBind(vk::True)
-            .setDescriptorBindingUpdateUnusedWhilePending(vk::True)
-            .setDescriptorBindingVariableDescriptorCount(vk::True)
-            .setRuntimeDescriptorArray(vk::True)
-            .setTimelineSemaphore(vk::True)
-            .setPNext(&vulkan13_features);
-        vulkan11_features
-            .setShaderDrawParameters(vk::True)
-            .setPNext(&vulkan12_features);
-        features.setPNext(&vulkan11_features);
-
-        gtl::vector<float> queue_priorities{};
-        queue_priorities.reserve(3);
-
-        for (uint32_t i = 0; i < m_QueueFamilyQueueCount; i++) {
-            queue_priorities.push_back(1.0f - static_cast<float>(i) / 6.0f);
-        }
-
-        vk::DeviceQueueCreateInfo vk_queue_create_info{};
-        vk_queue_create_info
-            .setQueueFamilyIndex(m_QueueFamilyIndex)
-            .setQueuePriorities(queue_priorities);
-
-        vk::DeviceCreateInfo vk_device_create_info{};
-        vk_device_create_info
-            .setQueueCreateInfos(vk_queue_create_info)
-            .setPEnabledExtensionNames(device_extensions)
-            .setPNext(&features);
-
-        {
-            auto [result, vk_device] = m_PhysicalDevice.createDevice(vk_device_create_info);
-            IGNIS_VK_CHECK(result);
-            m_Device = vk_device;
-        }
-
-        uint32_t queue_index = 0;
-        m_GraphicsQueue      = m_Device.getQueue(m_QueueFamilyIndex, queue_index);
-        if (queue_index + 1 < m_QueueFamilyQueueCount) queue_index++;
-        m_PresentQueue = m_Device.getQueue(m_QueueFamilyIndex, queue_index);
-        if (queue_index + 1 < m_QueueFamilyQueueCount) queue_index++;
-        m_ComputeQueue = m_Device.getQueue(m_QueueFamilyIndex, queue_index);
-
-        const auto [width, height] = Window::GetSize();
-
-        createSwapchain(width, height);
-
-        vma::AllocatorCreateInfo vma_allocator_create_info{};
-        vma_allocator_create_info
-            .setFlags(vma::AllocatorCreateFlagBits::eBufferDeviceAddress)
-            .setInstance(m_Instance)
-            .setPhysicalDevice(m_PhysicalDevice)
-            .setDevice(m_Device)
-            .setVulkanApiVersion(VK_API_VERSION_1_4);
-
-        auto [result, vma_allocator] = vma::createAllocator(vma_allocator_create_info);
-
-        IGNIS_VK_CHECK(result);
-
-        m_VmaAllocator = vma_allocator;
-    }
-
-    void Vulkan::release() {
-        destroySwapchain();
-
-        m_VmaAllocator.destroy();
-
-        m_Device.destroy();
-
-        m_Instance.destroySurfaceKHR(m_Surface);
-
-#if defined(IGNIS_BUILD_TYPE_DEBUG)
-        m_Instance.destroyDebugUtilsMessengerEXT(m_DebugMessenger, nullptr, m_DynamicLoader);
-#endif
-
-        m_Instance.destroy();
     }
 
     void Vulkan::createSwapchain(const uint32_t width, const uint32_t height) {
@@ -546,7 +541,7 @@ namespace Ignis {
         IGNIS_VK_CHECK(result);
         IGNIS_ASSERT(!physical_devices.empty(), "You need a GPU that supports VP_KHR_ROADMAP_2024 profile");
 
-        gtl::flat_hash_map<vk::PhysicalDeviceType, gtl::vector<vk::PhysicalDevice> > physical_device_map{};
+        gtl::flat_hash_map<vk::PhysicalDeviceType, std::vector<vk::PhysicalDevice> > physical_device_map{};
 
         for (const vk::PhysicalDevice &physical_device : physical_devices) {
             if (!CheckPhysicalDeviceSwapchainSupport(physical_device, m_Surface, required_usage_flags)) {

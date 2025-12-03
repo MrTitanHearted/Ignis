@@ -105,7 +105,7 @@ namespace Ignis {
         }
 
        private:
-        gtl::vector<EventListener<TEvent>> m_Listeners;
+        std::vector<EventListener<TEvent>> m_Listeners;
 
         gtl::flat_hash_map<std::type_index, size_t> m_ListenerLookUp;
 

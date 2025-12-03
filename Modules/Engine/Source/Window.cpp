@@ -5,95 +5,7 @@ namespace Ignis {
 
     IGNIS_IF_DEBUG(Window::State Window::s_State{};)
 
-    void Window::Initialize(Window *window, const Settings &settings) {
-        DIGNIS_ASSERT(nullptr == s_pInstance, "Ignis::Window is already initialized");
-        IGNIS_ASSERT(glfwInit() == GLFW_TRUE, "Failed to initialize GLFW");
-
-        s_pInstance = window;
-
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_RESIZABLE, settings.Resizable ? GLFW_TRUE : GLFW_FALSE);
-
-        uint32_t width  = settings.Width;
-        uint32_t height = settings.Height;
-
-        GLFWmonitor *monitor = settings.Fullscreen ? glfwGetPrimaryMonitor() : nullptr;
-        if (settings.Fullscreen && settings.FullscreenMonitorSize) {
-            const GLFWvidmode *mode = glfwGetVideoMode(monitor);
-
-            width  = mode->width;
-            height = mode->height;
-        }
-
-        s_pInstance->m_pWindow = glfwCreateWindow(
-            static_cast<int32_t>(width),
-            static_cast<int32_t>(height),
-            settings.Title.data(),
-            monitor, nullptr);
-
-        glfwSetWindowUserPointer(s_pInstance->m_pWindow, s_pInstance);
-
-        glfwSetWindowCloseCallback(s_pInstance->m_pWindow, GlfwWindowCloseCallback);
-        glfwSetWindowSizeCallback(s_pInstance->m_pWindow, GlfwWindowSizeCallback);
-        glfwSetWindowPosCallback(s_pInstance->m_pWindow, GlfwWindowPositionCallback);
-        glfwSetWindowContentScaleCallback(s_pInstance->m_pWindow, GlfwWindowContentScaleCallback);
-        glfwSetWindowPosCallback(s_pInstance->m_pWindow, GlfwWindowPositionCallback);
-        glfwSetWindowMaximizeCallback(s_pInstance->m_pWindow, GlfwWindowMaximizeCallback);
-        glfwSetWindowIconifyCallback(s_pInstance->m_pWindow, GlfwWindowMinimizeCallback);
-        glfwSetWindowFocusCallback(s_pInstance->m_pWindow, GlfwWindowFocusCallback);
-        glfwSetWindowRefreshCallback(s_pInstance->m_pWindow, GlfwWindowRefreshCallback);
-        glfwSetKeyCallback(s_pInstance->m_pWindow, GlfwWindowKeyCallback);
-        glfwSetCharCallback(s_pInstance->m_pWindow, GlfwWindowCharCallback);
-        glfwSetCursorPosCallback(s_pInstance->m_pWindow, GlfwWindowMousePositionCallback);
-        glfwSetCursorEnterCallback(s_pInstance->m_pWindow, GlfwWindowMouseEnterCallback);
-        glfwSetMouseButtonCallback(s_pInstance->m_pWindow, GlfwWindowMouseButtonCallback);
-        glfwSetScrollCallback(s_pInstance->m_pWindow, GlfwWindowMouseScrollCallback);
-        glfwSetDropCallback(s_pInstance->m_pWindow, GlfwWindowDropCallback);
-
-        glfwShowWindow(s_pInstance->m_pWindow);
-
-        s_pInstance->m_KeyMods = KeyMod::eNone;
-        std::fill(std::execution::par, std::begin(s_pInstance->m_Keys),
-                  std::end(s_pInstance->m_Keys), false);
-        std::fill(std::execution::par, std::begin(s_pInstance->m_MouseButtons),
-                  std::end(s_pInstance->m_MouseButtons), false);
-
-        if (monitor != nullptr) {
-            s_pInstance->m_PrevWidth  = width;
-            s_pInstance->m_PrevHeight = height;
-
-            const GLFWvidmode *mode = glfwGetVideoMode(monitor);
-
-            const uint32_t monitor_width  = mode->width;
-            const uint32_t monitor_height = mode->height;
-
-            s_pInstance->m_PrevX = (monitor_width - width) / 2;
-            s_pInstance->m_PrevY = (monitor_height - height) / 2;
-        }
-
-        DIGNIS_LOG_ENGINE_INFO("Ignis::Window Initialized");
-
-        SetStickyKeys(false);
-        SetStickyMouseButtons(false);
-        SetLockKeyMods(true);
-        SetRawMouseMotion(true);
-
-        if (!settings.Icon.empty())
-            SetIcon(settings.Icon);
-    }
-
-    void Window::Shutdown() {
-        glfwDestroyWindow(s_pInstance->m_pWindow);
-        glfwTerminate();
-
-        s_pInstance->m_pWindow = nullptr;
-
-        DIGNIS_LOG_ENGINE_INFO("Ignis::Window Shutdown");
-
-        s_pInstance = nullptr;
-    }
-
-    Window &Window::Get() {
+    Window &Window::GetRef() {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Window is not initialized.");
         return *s_pInstance;
     }
@@ -124,6 +36,7 @@ namespace Ignis {
         icon.height = static_cast<int32_t>(texture_asset.getHeight());
         icon.pixels = const_cast<unsigned char *>(texture_asset.getData().data());
 
+        // ReSharper disable once CppDFANullDereference
         glfwSetWindowIcon(s_pInstance->m_pWindow, 1, &icon);
     }
 
@@ -446,6 +359,96 @@ namespace Ignis {
     bool Window::IsMouseButtonUp(const MouseButton button) {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Window is not initialized.");
         return !s_pInstance->m_MouseButtons[static_cast<uint32_t>(button)];
+    }
+
+    void Window::initialize(const Settings &settings) {
+        DIGNIS_ASSERT(nullptr == s_pInstance, "Ignis::Window is already initialized");
+        IGNIS_ASSERT(glfwInit() != GLFW_FALSE, "Failed to initialize GLFW");
+
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_RESIZABLE, settings.Resizable ? GLFW_TRUE : GLFW_FALSE);
+
+        uint32_t width  = settings.Width;
+        uint32_t height = settings.Height;
+
+        GLFWmonitor *monitor = settings.Fullscreen ? glfwGetPrimaryMonitor() : nullptr;
+        if (settings.Fullscreen && settings.FullscreenMonitorSize) {
+            const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+
+            width  = mode->width;
+            height = mode->height;
+        }
+
+        m_pWindow = glfwCreateWindow(
+            static_cast<int32_t>(width),
+            static_cast<int32_t>(height),
+            settings.Title.data(),
+            monitor, nullptr);
+
+        glfwSetWindowUserPointer(m_pWindow, this);
+
+        glfwSetWindowCloseCallback(m_pWindow, GlfwWindowCloseCallback);
+        glfwSetWindowSizeCallback(m_pWindow, GlfwWindowSizeCallback);
+        glfwSetWindowPosCallback(m_pWindow, GlfwWindowPositionCallback);
+        glfwSetWindowContentScaleCallback(m_pWindow, GlfwWindowContentScaleCallback);
+        glfwSetWindowPosCallback(m_pWindow, GlfwWindowPositionCallback);
+        glfwSetWindowMaximizeCallback(m_pWindow, GlfwWindowMaximizeCallback);
+        glfwSetWindowIconifyCallback(m_pWindow, GlfwWindowMinimizeCallback);
+        glfwSetWindowFocusCallback(m_pWindow, GlfwWindowFocusCallback);
+        glfwSetWindowRefreshCallback(m_pWindow, GlfwWindowRefreshCallback);
+        glfwSetKeyCallback(m_pWindow, GlfwWindowKeyCallback);
+        glfwSetCharCallback(m_pWindow, GlfwWindowCharCallback);
+        glfwSetCursorPosCallback(m_pWindow, GlfwWindowMousePositionCallback);
+        glfwSetCursorEnterCallback(m_pWindow, GlfwWindowMouseEnterCallback);
+        glfwSetMouseButtonCallback(m_pWindow, GlfwWindowMouseButtonCallback);
+        glfwSetScrollCallback(m_pWindow, GlfwWindowMouseScrollCallback);
+        glfwSetDropCallback(m_pWindow, GlfwWindowDropCallback);
+
+        glfwShowWindow(m_pWindow);
+
+        m_KeyMods = KeyMod::eNone;
+        std::fill(std::execution::par, std::begin(m_Keys),
+                  std::end(m_Keys), false);
+        std::fill(std::execution::par, std::begin(m_MouseButtons),
+                  std::end(m_MouseButtons), false);
+
+        if (monitor != nullptr) {
+            m_PrevWidth  = width;
+            m_PrevHeight = height;
+
+            const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+
+            const uint32_t monitor_width  = mode->width;
+            const uint32_t monitor_height = mode->height;
+
+            m_PrevX = (monitor_width - width) / 2;
+            m_PrevY = (monitor_height - height) / 2;
+        }
+
+        s_pInstance = this;
+
+        DIGNIS_LOG_ENGINE_INFO("Ignis::Window Initialized");
+
+        SetStickyKeys(false);
+        SetStickyMouseButtons(false);
+        SetLockKeyMods(true);
+        SetRawMouseMotion(true);
+
+        if (!settings.Icon.empty())
+            SetIcon(settings.Icon);
+    }
+
+    void Window::shutdown() {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Window is not initialized.");
+
+        glfwDestroyWindow(m_pWindow);
+        glfwTerminate();
+
+        m_pWindow = nullptr;
+
+        DIGNIS_LOG_ENGINE_INFO("Ignis::Window Shutdown");
+
+        s_pInstance = nullptr;
     }
 
     IGNIS_IF_DEBUG(Window::State::~State() {

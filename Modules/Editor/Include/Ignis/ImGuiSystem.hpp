@@ -3,7 +3,7 @@
 #include <Ignis/Engine.hpp>
 
 namespace Ignis {
-    class ImGuiSystem final : public IUISystem {
+    class ImGuiSystem final : public IGUISystem {
        public:
         ImGuiSystem()           = default;
         ~ImGuiSystem() override = default;
@@ -19,22 +19,17 @@ namespace Ignis {
         vk::DescriptorPool getDescriptorPool() const;
         vk::Sampler        getImageSampler() const;
 
-        vk::DescriptorSet addFrameImage2D(vk::Image image, vk::ImageView view, const vk::Extent2D &extent);
+        vk::DescriptorSet addImage2D(FrameGraph::ImageID id, vk::ImageView view);
 
-       private:
-        struct ImageInfo {
-            vk::Image     Handle;
-            vk::ImageView View;
-            vk::Extent2D  Extent;
-
-            vk::DescriptorSet Descriptor;
-        };
+        void removeImage2D(FrameGraph::ImageID id, vk::DescriptorSet set);
 
        private:
         vk::DescriptorPool m_DescriptorPool;
 
         vk::Sampler m_ImageSampler;
 
-        gtl::vector<ImageInfo> m_FrameImages;
+        std::vector<FrameGraph::ImageID> m_ImageIDs;
+
+        gtl::flat_hash_map<FrameGraph::ImageID, size_t> m_ImageLookUp;
     };
 }  // namespace Ignis

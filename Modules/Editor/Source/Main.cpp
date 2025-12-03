@@ -7,7 +7,7 @@
 int32_t main(
     const int32_t argc,
     const char  **argv) {
-    gtl::vector<std::string_view> arguments{};
+    std::vector<std::string_view> arguments{};
     arguments.resize(argc);
 
     for (uint32_t i = 0; i < argc; i++) {
@@ -39,15 +39,15 @@ int32_t main(
     Ignis::Logger logger{};
     Ignis::Engine engine{};
 
-    Ignis::Logger::Initialize(&logger, logger_settings);
-    Ignis::Engine::Initialize(&engine, engine_settings);
+    logger.initialize(logger_settings);
+    engine.initialize(engine_settings);
 
     engine.pushLayer<Ignis::Editor>(Ignis::Editor::Settings{});
 
     engine.run();
 
-    Ignis::Engine::Shutdown();
-    Ignis::Logger::Shutdown();
+    engine.shutdown();
+    logger.shutdown();
 
     return 0;
 }

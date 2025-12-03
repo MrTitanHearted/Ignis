@@ -30,6 +30,6 @@ namespace Ignis {
 
     template <typename TLayer>
     ILayer<TLayer>::ILayer()
-        : ALayer{&Engine::Get(), typeid(TLayer)} {}
+        : ALayer{&Engine::GetRef(), typeid(TLayer)} {}
 
 }  // namespace Ignis

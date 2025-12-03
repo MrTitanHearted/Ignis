@@ -33,7 +33,6 @@
 #include <spdlog/sinks/sink.h>
 
 #include <gtl/phmap.hpp>
-#include <gtl/vector.hpp>
 
 #include <vulkan/vulkan.hpp>
 
@@ -54,3 +53,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtx/string_cast.hpp>
+
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>

@@ -130,39 +130,44 @@ namespace Ignis {
         DIGNIS_VK_CHECK(command_buffer.end());
     }
 
-    void Vulkan::CopyImageToImage(
+    void Vulkan::BlitImageToImage(
         const vk::Image         src_image,
         const vk::Image         dst_image,
+        const vk::Offset3D     &src_offset,
+        const vk::Offset3D     &dst_offset,
         const vk::Extent3D     &src_extent,
         const vk::Extent3D     &dst_extent,
         const vk::CommandBuffer command_buffer) {
         vk::ImageBlit2 blit_region{};
         blit_region
-            .setSrcOffsets(
-                {vk::Offset3D{0, 0, 0},
-                 vk::Offset3D{
-                     static_cast<int32_t>(src_extent.width),
-                     static_cast<int32_t>(src_extent.height),
-                     static_cast<int32_t>(src_extent.depth),
-                 }})
-            .setDstOffsets(
-                {vk::Offset3D{0, 0, 0},
-                 vk::Offset3D{
-                     static_cast<int32_t>(dst_extent.width),
-                     static_cast<int32_t>(dst_extent.height),
-                     static_cast<int32_t>(dst_extent.depth),
-                 }})
+            .setSrcOffsets({
+                src_offset,
+                vk::Offset3D{
+                    static_cast<int32_t>(src_extent.width),
+                    static_cast<int32_t>(src_extent.height),
+                    static_cast<int32_t>(src_extent.depth),
+                },
+            })
+            .setDstOffsets({
+                dst_offset,
+                vk::Offset3D{
+                    static_cast<int32_t>(dst_extent.width),
+                    static_cast<int32_t>(dst_extent.height),
+                    static_cast<int32_t>(dst_extent.depth),
+                },
+            })
             .setSrcSubresource(
                 vk::ImageSubresourceLayers{}
                     .setAspectMask(vk::ImageAspectFlagBits::eColor)
                     .setBaseArrayLayer(0)
                     .setLayerCount(1)
                     .setMipLevel(0))
-            .setDstSubresource(vk::ImageSubresourceLayers{}
-                                   .setAspectMask(vk::ImageAspectFlagBits::eColor)
-                                   .setBaseArrayLayer(0)
-                                   .setLayerCount(1)
-                                   .setMipLevel(0));
+            .setDstSubresource(
+                vk::ImageSubresourceLayers{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                    .setBaseArrayLayer(0)
+                    .setLayerCount(1)
+                    .setMipLevel(0));
 
         vk::BlitImageInfo2 blit_info{};
         blit_info
@@ -170,10 +175,46 @@ namespace Ignis {
             .setSrcImageLayout(vk::ImageLayout::eTransferSrcOptimal)
             .setDstImage(dst_image)
             .setDstImageLayout(vk::ImageLayout::eTransferDstOptimal)
-            .setFilter(vk::Filter::eLinear)
+            .setFilter(vk::Filter::eNearest)
             .setRegions({blit_region});
 
         command_buffer.blitImage2(blit_info);
+    }
+
+    void Vulkan::CopyImageToImage(
+        const vk::Image         src_image,
+        const vk::Image         dst_image,
+        const vk::Offset3D     &src_offset,
+        const vk::Offset3D     &dst_offset,
+        const vk::Extent3D     &extent,
+        const vk::CommandBuffer command_buffer) {
+        vk::ImageCopy2 region{};
+        region
+            .setSrcOffset(src_offset)
+            .setDstOffset(dst_offset)
+            .setSrcSubresource(
+                vk::ImageSubresourceLayers{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                    .setBaseArrayLayer(0)
+                    .setLayerCount(1)
+                    .setMipLevel(0))
+            .setDstSubresource(
+                vk::ImageSubresourceLayers{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                    .setBaseArrayLayer(0)
+                    .setLayerCount(1)
+                    .setMipLevel(0))
+            .setExtent(extent);
+
+        vk::CopyImageInfo2 copy_info{};
+        copy_info
+            .setSrcImage(src_image)
+            .setDstImage(dst_image)
+            .setSrcImageLayout(vk::ImageLayout::eTransferSrcOptimal)
+            .setDstImageLayout(vk::ImageLayout::eTransferDstOptimal)
+            .setRegions(region);
+
+        command_buffer.copyImage2(copy_info);
     }
 
     void Vulkan::CopyBufferToBuffer(
@@ -194,6 +235,70 @@ namespace Ignis {
             .setDstBuffer(dst_buffer)
             .setRegions(region);
         command_buffer.copyBuffer2(copy_info);
+    }
+
+    void Vulkan::CopyBufferToImage(
+        const vk::Buffer        src_buffer,
+        const vk::Image         dst_image,
+        const uint64_t          src_offset,
+        const vk::Offset3D     &dst_offset,
+        const vk::Extent2D     &src_extent,
+        const vk::Extent3D     &dst_extent,
+        const vk::CommandBuffer command_buffer) {
+        vk::BufferImageCopy2 region{};
+        region
+            .setBufferOffset(src_offset)
+            .setImageOffset(dst_offset)
+            .setBufferRowLength(src_extent.width)
+            .setBufferImageHeight(src_extent.height)
+            .setImageExtent(dst_extent)
+            .setImageSubresource(
+                vk::ImageSubresourceLayers{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                    .setBaseArrayLayer(0)
+                    .setLayerCount(1)
+                    .setMipLevel(0));
+
+        vk::CopyBufferToImageInfo2 copy_info{};
+        copy_info
+            .setSrcBuffer(src_buffer)
+            .setDstImage(dst_image)
+            .setDstImageLayout(vk::ImageLayout::eTransferDstOptimal)
+            .setRegions(region);
+
+        command_buffer.copyBufferToImage2(copy_info);
+    }
+
+    void Vulkan::CopyImageToBuffer(
+        const vk::Image         src_image,
+        const vk::Buffer        dst_buffer,
+        const vk::Offset3D     &src_offset,
+        const uint64_t          dst_offset,
+        const vk::Extent3D     &src_extent,
+        const vk::Extent2D     &dst_extent,
+        const vk::CommandBuffer command_buffer) {
+        vk::BufferImageCopy2 region{};
+        region
+            .setImageOffset(src_offset)
+            .setBufferOffset(dst_offset)
+            .setImageExtent(src_extent)
+            .setBufferRowLength(src_extent.width)
+            .setBufferImageHeight(src_extent.height)
+            .setImageSubresource(
+                vk::ImageSubresourceLayers{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                    .setBaseArrayLayer(0)
+                    .setLayerCount(1)
+                    .setMipLevel(0));
+
+        vk::CopyImageToBufferInfo2 copy_info{};
+        copy_info
+            .setSrcImage(src_image)
+            .setDstBuffer(dst_buffer)
+            .setSrcImageLayout(vk::ImageLayout::eTransferSrcOptimal)
+            .setRegions(region);
+
+        command_buffer.copyImageToBuffer2(copy_info);
     }
 
     vk::CommandBufferSubmitInfo Vulkan::GetCommandBufferSubmitInfo(const vk::CommandBuffer command_buffer) {

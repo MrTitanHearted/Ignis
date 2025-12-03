@@ -14,7 +14,7 @@ namespace Ignis {
        protected:
         virtual void onUpdate(double dt) {}
 
-        virtual void onUI(IUISystem *ui_system) {}
+        virtual void onGUI(IGUISystem *ui_system) {}
 
         virtual void onRender(FrameGraph &frame_graph) {}
 
@@ -23,7 +23,7 @@ namespace Ignis {
                      std::is_base_of_v<ALayer, TLayer>)
         void attachCallback(bool (TLayer::*method)(const TEvent &)) {
             attachCallback<TEvent>([this, method](const TEvent &event) {
-                return (this->*method)(event);
+                return (static_cast<TLayer *>(this)->*method)(event);
             });
         }
 
@@ -32,7 +32,7 @@ namespace Ignis {
                      std::is_base_of_v<ALayer, TLayer>)
         void attachCallback(bool (TLayer::*method)(const TEvent &) const) const {
             attachCallback<TEvent>([this, method](const TEvent &event) {
-                return (this->*method)(event);
+                return (static_cast<const TLayer *>(this)->*method)(event);
             });
         }
 

@@ -35,29 +35,29 @@ target_link_libraries(IgnisEditor PRIVATE Ignis::Ignis)
 
 target_precompile_headers(IgnisEditor REUSE_FROM Ignis::Ignis)
 
-if(WIN32 AND WIN32_RELEASE_MODE_NO_CONSOLE)
-    if(MSVC)
+if (WIN32 AND WIN32_RELEASE_MODE_NO_CONSOLE)
+    if (MSVC)
         set_target_properties(IgnisEditor PROPERTIES WIN32_EXECUTABLE $<$<CONFIG:Release>:TRUE>)
-    elseif(CMAKE_BUILD_TYPE MATCHES Release)
+    elseif (CMAKE_BUILD_TYPE MATCHES Release)
         set_target_properties(IgnisEditor PROPERTIES WIN32_EXECUTABLE TRUE)
-    endif()
-endif()
+    endif ()
+endif ()
 
-if(MSVC)
+if (MSVC)
     set_property(DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT IgnisEditor)
-endif()
+endif ()
 
 find_program(SLANGC_EXECUTABLE slangc REQUIRED)
 
-if(NOT SLANGC_EXECUTABLE)
+if (NOT SLANGC_EXECUTABLE)
     message(FATAL_ERROR "Slang compiler not found. Install slangc and add it to PATH.")
-endif()
+endif ()
 
 file(GLOB_RECURSE IGNIS_EDITOR_SHADERS ${IGNIS_ASSETS_SOURCE_DIR}/Shaders/*.slang)
 
 set(SPIRV_BINARY_FILES "")
 
-foreach(SHADER_FILE ${IGNIS_EDITOR_SHADERS})
+foreach (SHADER_FILE ${IGNIS_EDITOR_SHADERS})
     get_filename_component(FILE_NAME_WE ${SHADER_FILE} NAME_WE)
     get_filename_component(FILE_PATH ${SHADER_FILE} PATH)
 
@@ -70,7 +70,7 @@ foreach(SHADER_FILE ${IGNIS_EDITOR_SHADERS})
     )
 
     list(APPEND SPIRV_BINARY_FILES ${SPIRV})
-endforeach()
+endforeach ()
 
 add_custom_target(IgnisEditorAssets ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${IGNIS_ASSETS_SOURCE_DIR} ${IGNIS_ASSETS_DESTINATION_DIR}
