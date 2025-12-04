@@ -93,207 +93,226 @@ namespace Ignis {
         return *this;
     }
 
-    vk::AccessFlags2 FrameGraph::GetImageReadAccess(vk::ImageUsageFlags usage, vk::PipelineStageFlags2 stages) {
+    bool FrameGraph::IsWriteAccess(const vk::AccessFlags2 access) {
+        constexpr auto write_mask =
+            vk::AccessFlagBits2::eShaderStorageWrite |
+            vk::AccessFlagBits2::eColorAttachmentWrite |
+            vk::AccessFlagBits2::eDepthStencilAttachmentWrite |
+            vk::AccessFlagBits2::eTransferWrite |
+            vk::AccessFlagBits2::eMemoryWrite |
+            vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
+
+        return (access & write_mask) != vk::AccessFlagBits2::eNone;
+    }
+
+    bool FrameGraph::NeedsMemoryBarrier(const vk::AccessFlags2 src, const vk::AccessFlags2 dst) {
+        // RAR (Read-After-Read) - NO barrier needed
+        if (!IsWriteAccess(src) && !IsWriteAccess(dst)) {
+            return false;
+        }
+
+        // WAR (Write-After-Read) - need barrier
+        // RAW (Read-After-Write) - need barrier
+        // WAW (Write-After-Write) - need barrier
+        return true;
+    }
+
+    bool FrameGraph::NeedsImageBarrier(
+        const vk::AccessFlags2 src_access,
+        const vk::AccessFlags2 dst_access,
+        const vk::ImageLayout  src_layout,
+        const vk::ImageLayout  dst_layout) {
+        if (src_layout != dst_layout) {
+            return true;
+        }
+
+        // Check memory dependency
+        return NeedsMemoryBarrier(src_access, dst_access);
+    }
+
+    bool FrameGraph::NeedsBufferBarrier(const vk::AccessFlags2 src, const vk::AccessFlags2 dst) {
+        return NeedsMemoryBarrier(src, dst);
+    }
+
+    vk::AccessFlags2 FrameGraph::GetImageReadAccess(const vk::ImageUsageFlags usage, const vk::PipelineStageFlags2 stages) {
         vk::AccessFlags2 access = vk::AccessFlagBits2::eNone;
 
         // Sampled image reads
-        if (usage & vk::ImageUsageFlagBits::eSampled) {
-            if (stages & (vk::PipelineStageFlagBits2::eVertexShader |
-                          vk::PipelineStageFlagBits2::eFragmentShader |
-                          vk::PipelineStageFlagBits2::eComputeShader |
-                          vk::PipelineStageFlagBits2::eRayTracingShaderKHR |
-                          vk::PipelineStageFlagBits2::eTaskShaderEXT |
-                          vk::PipelineStageFlagBits2::eMeshShaderEXT)) {
-                access |= vk::AccessFlagBits2::eShaderSampledRead;
-            }
+        if ((usage & vk::ImageUsageFlagBits::eSampled) &&
+            (stages & (vk::PipelineStageFlagBits2::eVertexShader |
+                       vk::PipelineStageFlagBits2::eFragmentShader |
+                       vk::PipelineStageFlagBits2::eComputeShader |
+                       vk::PipelineStageFlagBits2::eRayTracingShaderKHR |
+                       vk::PipelineStageFlagBits2::eTaskShaderEXT |
+                       vk::PipelineStageFlagBits2::eMeshShaderEXT))) {
+            access |= vk::AccessFlagBits2::eShaderSampledRead;
         }
 
         // Storage image reads
-        if (usage & vk::ImageUsageFlagBits::eStorage) {
-            if (stages & (vk::PipelineStageFlagBits2::eComputeShader |
-                          vk::PipelineStageFlagBits2::eFragmentShader |
-                          vk::PipelineStageFlagBits2::eVertexShader |
-                          vk::PipelineStageFlagBits2::eRayTracingShaderKHR)) {
-                access |= vk::AccessFlagBits2::eShaderStorageRead;
-            }
+        if ((usage & vk::ImageUsageFlagBits::eStorage) &&
+            (stages & (vk::PipelineStageFlagBits2::eComputeShader |
+                       vk::PipelineStageFlagBits2::eFragmentShader |
+                       vk::PipelineStageFlagBits2::eVertexShader |
+                       vk::PipelineStageFlagBits2::eRayTracingShaderKHR))) {
+            access |= vk::AccessFlagBits2::eShaderStorageRead;
         }
 
         // Input attachment reads
-        if (usage & vk::ImageUsageFlagBits::eInputAttachment) {
-            if (stages & vk::PipelineStageFlagBits2::eFragmentShader) {
-                access |= vk::AccessFlagBits2::eInputAttachmentRead;
-            }
+        if ((usage & vk::ImageUsageFlagBits::eInputAttachment) &&
+            (stages & vk::PipelineStageFlagBits2::eFragmentShader)) {
+            access |= vk::AccessFlagBits2::eInputAttachmentRead;
         }
 
         // Color attachment reads (for blending)
-        if (usage & vk::ImageUsageFlagBits::eColorAttachment) {
-            if (stages & vk::PipelineStageFlagBits2::eColorAttachmentOutput) {
-                access |= vk::AccessFlagBits2::eColorAttachmentRead;
-            }
+        if ((usage & vk::ImageUsageFlagBits::eColorAttachment) &&
+            (stages & vk::PipelineStageFlagBits2::eColorAttachmentOutput)) {
+            access |= vk::AccessFlagBits2::eColorAttachmentRead;
         }
 
         // Depth/stencil attachment reads
-        if (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment) {
-            if (stages & (vk::PipelineStageFlagBits2::eEarlyFragmentTests |
-                          vk::PipelineStageFlagBits2::eLateFragmentTests)) {
-                access |= vk::AccessFlagBits2::eDepthStencilAttachmentRead;
-            }
+        if ((usage & vk::ImageUsageFlagBits::eDepthStencilAttachment) &&
+            (stages & (vk::PipelineStageFlagBits2::eEarlyFragmentTests |
+                       vk::PipelineStageFlagBits2::eLateFragmentTests))) {
+            access |= vk::AccessFlagBits2::eDepthStencilAttachmentRead;
         }
 
         // Transfer source reads
-        if (usage & vk::ImageUsageFlagBits::eTransferSrc) {
-            if (stages & vk::PipelineStageFlagBits2::eTransfer) {
-                access |= vk::AccessFlagBits2::eTransferRead;
-            }
+        if ((usage & vk::ImageUsageFlagBits::eTransferSrc) &&
+            (stages & vk::PipelineStageFlagBits2::eTransfer)) {
+            access |= vk::AccessFlagBits2::eTransferRead;
         }
 
         return access;
     }
 
-    vk::AccessFlags2 FrameGraph::GetImageWriteAccess(vk::ImageUsageFlags usage, vk::PipelineStageFlags2 stages) {
+    vk::AccessFlags2 FrameGraph::GetImageWriteAccess(const vk::ImageUsageFlags usage, const vk::PipelineStageFlags2 stages) {
         vk::AccessFlags2 access = vk::AccessFlagBits2::eNone;
 
         // Storage image writes
-        if (usage & vk::ImageUsageFlagBits::eStorage) {
-            if (stages & (vk::PipelineStageFlagBits2::eComputeShader |
-                          vk::PipelineStageFlagBits2::eFragmentShader |
-                          vk::PipelineStageFlagBits2::eVertexShader |
-                          vk::PipelineStageFlagBits2::eRayTracingShaderKHR)) {
-                access |= vk::AccessFlagBits2::eShaderStorageWrite;
-            }
+        if ((usage & vk::ImageUsageFlagBits::eStorage) &&
+            (stages & (vk::PipelineStageFlagBits2::eComputeShader |
+                       vk::PipelineStageFlagBits2::eFragmentShader |
+                       vk::PipelineStageFlagBits2::eVertexShader |
+                       vk::PipelineStageFlagBits2::eRayTracingShaderKHR))) {
+            access |= vk::AccessFlagBits2::eShaderStorageWrite;
         }
 
         // Color attachment writes
-        if (usage & vk::ImageUsageFlagBits::eColorAttachment) {
-            if (stages & vk::PipelineStageFlagBits2::eColorAttachmentOutput) {
-                access |= vk::AccessFlagBits2::eColorAttachmentWrite;
-            }
+        if ((usage & vk::ImageUsageFlagBits::eColorAttachment) &&
+            (stages & vk::PipelineStageFlagBits2::eColorAttachmentOutput)) {
+            access |= vk::AccessFlagBits2::eColorAttachmentWrite;
         }
 
         // Depth/stencil attachment writes
-        if (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment) {
-            if (stages & (vk::PipelineStageFlagBits2::eEarlyFragmentTests |
-                          vk::PipelineStageFlagBits2::eLateFragmentTests)) {
-                access |= vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
-            }
+        if ((usage & vk::ImageUsageFlagBits::eDepthStencilAttachment) &&
+            (stages & (vk::PipelineStageFlagBits2::eEarlyFragmentTests |
+                       vk::PipelineStageFlagBits2::eLateFragmentTests))) {
+            access |= vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
         }
 
         // Transfer destination writes
-        if (usage & vk::ImageUsageFlagBits::eTransferDst) {
-            if (stages & vk::PipelineStageFlagBits2::eTransfer) {
-                access |= vk::AccessFlagBits2::eTransferWrite;
-            }
+        if ((usage & vk::ImageUsageFlagBits::eTransferDst) &&
+            (stages & vk::PipelineStageFlagBits2::eTransfer)) {
+            access |= vk::AccessFlagBits2::eTransferWrite;
         }
 
         return access;
     }
 
-    vk::AccessFlags2 FrameGraph::GetBufferReadAccess(vk::BufferUsageFlags usage, vk::PipelineStageFlags2 stages) {
+    vk::AccessFlags2 FrameGraph::GetBufferReadAccess(const vk::BufferUsageFlags usage, const vk::PipelineStageFlags2 stages) {
         vk::AccessFlags2 access = vk::AccessFlagBits2::eNone;
 
         // Uniform buffer reads
-        if (usage & vk::BufferUsageFlagBits::eUniformBuffer) {
-            if (stages & (vk::PipelineStageFlagBits2::eVertexShader |
-                          vk::PipelineStageFlagBits2::eFragmentShader |
-                          vk::PipelineStageFlagBits2::eComputeShader |
-                          vk::PipelineStageFlagBits2::eRayTracingShaderKHR |
-                          vk::PipelineStageFlagBits2::eTaskShaderEXT |
-                          vk::PipelineStageFlagBits2::eMeshShaderEXT)) {
-                access |= vk::AccessFlagBits2::eUniformRead;
-            }
+        if ((usage & vk::BufferUsageFlagBits::eUniformBuffer) &&
+            (stages & (vk::PipelineStageFlagBits2::eVertexShader |
+                       vk::PipelineStageFlagBits2::eFragmentShader |
+                       vk::PipelineStageFlagBits2::eComputeShader |
+                       vk::PipelineStageFlagBits2::eRayTracingShaderKHR |
+                       vk::PipelineStageFlagBits2::eTaskShaderEXT |
+                       vk::PipelineStageFlagBits2::eMeshShaderEXT))) {
+            access |= vk::AccessFlagBits2::eUniformRead;
         }
 
         // Storage buffer reads
-        if (usage & vk::BufferUsageFlagBits::eStorageBuffer) {
-            if (stages & (vk::PipelineStageFlagBits2::eVertexShader |
-                          vk::PipelineStageFlagBits2::eFragmentShader |
-                          vk::PipelineStageFlagBits2::eComputeShader |
-                          vk::PipelineStageFlagBits2::eRayTracingShaderKHR |
-                          vk::PipelineStageFlagBits2::eTaskShaderEXT |
-                          vk::PipelineStageFlagBits2::eMeshShaderEXT)) {
-                access |= vk::AccessFlagBits2::eShaderStorageRead;
-            }
+        if ((usage & vk::BufferUsageFlagBits::eStorageBuffer) &&
+            (stages & (vk::PipelineStageFlagBits2::eVertexShader |
+                       vk::PipelineStageFlagBits2::eFragmentShader |
+                       vk::PipelineStageFlagBits2::eComputeShader |
+                       vk::PipelineStageFlagBits2::eRayTracingShaderKHR |
+                       vk::PipelineStageFlagBits2::eTaskShaderEXT |
+                       vk::PipelineStageFlagBits2::eMeshShaderEXT))) {
+            access |= vk::AccessFlagBits2::eShaderStorageRead;
         }
 
         // Vertex buffer reads
-        if (usage & vk::BufferUsageFlagBits::eVertexBuffer) {
-            if (stages & vk::PipelineStageFlagBits2::eVertexInput) {
-                access |= vk::AccessFlagBits2::eVertexAttributeRead;
-            }
+        if ((usage & vk::BufferUsageFlagBits::eVertexBuffer) &&
+            (stages & vk::PipelineStageFlagBits2::eVertexInput)) {
+            access |= vk::AccessFlagBits2::eVertexAttributeRead;
         }
 
         // Index buffer reads
-        if (usage & vk::BufferUsageFlagBits::eIndexBuffer) {
-            if (stages & vk::PipelineStageFlagBits2::eIndexInput) {
-                access |= vk::AccessFlagBits2::eIndexRead;
-            }
+        if ((usage & vk::BufferUsageFlagBits::eIndexBuffer) &&
+            (stages & vk::PipelineStageFlagBits2::eIndexInput)) {
+            access |= vk::AccessFlagBits2::eIndexRead;
         }
 
         // Indirect buffer reads
-        if (usage & vk::BufferUsageFlagBits::eIndirectBuffer) {
-            if (stages & vk::PipelineStageFlagBits2::eDrawIndirect) {
-                access |= vk::AccessFlagBits2::eIndirectCommandRead;
-            }
+        if ((usage & vk::BufferUsageFlagBits::eIndirectBuffer) &&
+            (stages & vk::PipelineStageFlagBits2::eDrawIndirect)) {
+            access |= vk::AccessFlagBits2::eIndirectCommandRead;
         }
 
         // Transfer source reads
-        if (usage & vk::BufferUsageFlagBits::eTransferSrc) {
-            if (stages & vk::PipelineStageFlagBits2::eTransfer) {
-                access |= vk::AccessFlagBits2::eTransferRead;
-            }
+        if ((usage & vk::BufferUsageFlagBits::eTransferSrc) &&
+            (stages & vk::PipelineStageFlagBits2::eTransfer)) {
+            access |= vk::AccessFlagBits2::eTransferRead;
         }
 
         // Acceleration structure reads
-        if (usage & vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR) {
-            if (stages & vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR) {
-                access |= vk::AccessFlagBits2::eAccelerationStructureReadKHR;
-            }
+        if ((usage & vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR) &&
+            (stages & vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR)) {
+            access |= vk::AccessFlagBits2::eAccelerationStructureReadKHR;
         }
 
         // Shader binding table reads
-        if (usage & vk::BufferUsageFlagBits::eShaderBindingTableKHR) {
-            if (stages & vk::PipelineStageFlagBits2::eRayTracingShaderKHR) {
-                access |= vk::AccessFlagBits2::eShaderBindingTableReadKHR;
-            }
+        if ((usage & vk::BufferUsageFlagBits::eShaderBindingTableKHR) &&
+            (stages & vk::PipelineStageFlagBits2::eRayTracingShaderKHR)) {
+            access |= vk::AccessFlagBits2::eShaderBindingTableReadKHR;
         }
 
         // Acceleration structure build input reads
-        if (usage & vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR) {
-            if (stages & vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR) {
-                access |= vk::AccessFlagBits2::eAccelerationStructureReadKHR;
-            }
+        if ((usage & vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR) &&
+            (stages & vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR)) {
+            access |= vk::AccessFlagBits2::eAccelerationStructureReadKHR;
         }
 
         return access;
     }
 
-    vk::AccessFlags2 FrameGraph::GetBufferWriteAccess(vk::BufferUsageFlags usage, vk::PipelineStageFlags2 stages) {
+    vk::AccessFlags2 FrameGraph::GetBufferWriteAccess(const vk::BufferUsageFlags usage, const vk::PipelineStageFlags2 stages) {
         vk::AccessFlags2 access = vk::AccessFlagBits2::eNone;
 
         // Storage buffer writes
-        if (usage & vk::BufferUsageFlagBits::eStorageBuffer) {
-            if (stages & (vk::PipelineStageFlagBits2::eVertexShader |
-                          vk::PipelineStageFlagBits2::eFragmentShader |
-                          vk::PipelineStageFlagBits2::eComputeShader |
-                          vk::PipelineStageFlagBits2::eRayTracingShaderKHR |
-                          vk::PipelineStageFlagBits2::eTaskShaderEXT |
-                          vk::PipelineStageFlagBits2::eMeshShaderEXT)) {
-                access |= vk::AccessFlagBits2::eShaderStorageWrite;
-            }
+        if ((usage & vk::BufferUsageFlagBits::eStorageBuffer) &&
+            (stages & (vk::PipelineStageFlagBits2::eVertexShader |
+                       vk::PipelineStageFlagBits2::eFragmentShader |
+                       vk::PipelineStageFlagBits2::eComputeShader |
+                       vk::PipelineStageFlagBits2::eRayTracingShaderKHR |
+                       vk::PipelineStageFlagBits2::eTaskShaderEXT |
+                       vk::PipelineStageFlagBits2::eMeshShaderEXT))) {
+            access |= vk::AccessFlagBits2::eShaderStorageWrite;
         }
 
         // Transfer destination writes
-        if (usage & vk::BufferUsageFlagBits::eTransferDst) {
-            if (stages & vk::PipelineStageFlagBits2::eTransfer) {
-                access |= vk::AccessFlagBits2::eTransferWrite;
-            }
+        if ((usage & vk::BufferUsageFlagBits::eTransferDst) &&
+            (stages & vk::PipelineStageFlagBits2::eTransfer)) {
+            access |= vk::AccessFlagBits2::eTransferWrite;
         }
 
         // Acceleration structure writes
-        if (usage & vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR) {
-            if (stages & vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR) {
-                access |= vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
-            }
+        if ((usage & vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR) &&
+            (stages & vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR)) {
+            access |= vk::AccessFlagBits2::eAccelerationStructureWriteKHR;
         }
 
         return access;
@@ -434,6 +453,11 @@ namespace Ignis {
         return m_ImageStates[id].Format;
     }
 
+    vk::ImageUsageFlags FrameGraph::getImageUsage(const ImageID id) const {
+        DIGNIS_ASSERT(id < m_NextImageID, "FrameGraph::ImageID is incorrect image id.");
+        return m_ImageStates[id].Usage;
+    }
+
     vk::Extent3D FrameGraph::getImageExtent(const ImageID id) const {
         DIGNIS_ASSERT(id < m_NextImageID, "FrameGraph::ImageID is incorrect image id.");
         return m_ImageStates[id].Extent;
@@ -442,6 +466,21 @@ namespace Ignis {
     vk::Buffer FrameGraph::getBuffer(const BufferID id) const {
         DIGNIS_ASSERT(id < m_NextBufferID, "FrameGraph::BufferID is incorrect buffer id.");
         return m_BufferStates[id].Handle;
+    }
+
+    uint64_t FrameGraph::getBufferOffset(const BufferID id) const {
+        DIGNIS_ASSERT(id < m_NextBufferID, "FrameGraph::BufferID is incorrect buffer id.");
+        return m_BufferStates[id].Offset;
+    }
+
+    uint64_t FrameGraph::getBufferSize(const BufferID id) const {
+        DIGNIS_ASSERT(id < m_NextBufferID, "FrameGraph::BufferID is incorrect buffer id.");
+        return m_BufferStates[id].Size;
+    }
+
+    vk::BufferUsageFlags FrameGraph::getBufferUsage(BufferID id) const {
+        DIGNIS_ASSERT(id < m_NextBufferID, "FrameGraph::BufferID is incorrect buffer id.");
+        return m_BufferStates[id].Usage;
     }
 
     FrameGraph::ImageID FrameGraph::getSwapchainImageID() const {
@@ -586,11 +625,15 @@ namespace Ignis {
 
             const auto dst_layout = final_layout;
 
-            constexpr auto dst_stage  = vk::PipelineStageFlagBits2::eAllCommands;
-            constexpr auto dst_access = vk::AccessFlagBits2::eMemoryRead |
-                                        vk::AccessFlagBits2::eMemoryWrite;
+            const auto dst_stages = (dst_layout == vk::ImageLayout::ePresentSrcKHR)
+                                        ? vk::PipelineStageFlagBits2::eBottomOfPipe
+                                        : vk::PipelineStageFlagBits2::eAllCommands;
 
-            if (src_layout != dst_layout) {
+            const auto dst_access = (dst_layout == vk::ImageLayout::ePresentSrcKHR)
+                                        ? vk::AccessFlagBits2::eNone
+                                        : (vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite);
+
+            if (NeedsImageBarrier(src_access, dst_access, src_layout, dst_layout)) {
                 final_barriers
                     .put_image_barrier(
                         image_state.Handle,
@@ -598,7 +641,7 @@ namespace Ignis {
                         dst_layout,
                         src_stage,
                         src_access,
-                        dst_stage,
+                        dst_stages,
                         dst_access);
 
                 resource_tracker.LastImageLayout[image_id] = src_layout;
@@ -610,7 +653,6 @@ namespace Ignis {
         m_RenderPasses.clear();
         m_ComputePasses.clear();
         m_PassIndices.clear();
-
         removeImage(m_SwapchainImageID);
 
         return Executor{passes, final_barriers};
@@ -636,9 +678,7 @@ namespace Ignis {
             constexpr auto dst_stages = vk::PipelineStageFlagBits2::eFragmentShader;
             const auto     dst_access = GetImageReadAccess(image_state.Usage, dst_stages);
 
-            if (src_layout != dst_layout ||
-                src_stages != dst_stages ||
-                src_access != dst_access) {
+            if (NeedsImageBarrier(src_access, dst_access, src_layout, dst_layout)) {
                 barrier_merger.put_image_barrier(
                     image_state.Handle,
                     src_layout,
@@ -663,11 +703,14 @@ namespace Ignis {
 
             constexpr auto dst_layout = vk::ImageLayout::eColorAttachmentOptimal;
             constexpr auto dst_stages = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
-            constexpr auto dst_access = vk::AccessFlagBits2::eColorAttachmentWrite;
 
-            if (src_layout != dst_layout ||
-                src_stages != dst_stages ||
-                src_access != dst_access) {
+            vk::AccessFlags2 dst_access = vk::AccessFlagBits2::eColorAttachmentWrite;
+
+            if (attachment.LoadOp == vk::AttachmentLoadOp::eLoad) {
+                dst_access |= vk::AccessFlagBits2::eColorAttachmentRead;
+            }
+
+            if (NeedsImageBarrier(src_access, dst_access, src_layout, dst_layout)) {
                 barrier_merger.put_image_barrier(
                     image_state.Handle,
                     src_layout,
@@ -694,16 +737,10 @@ namespace Ignis {
             constexpr auto dst_layout = vk::ImageLayout::eDepthAttachmentOptimal;
             constexpr auto dst_stages = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
                                         vk::PipelineStageFlagBits2::eLateFragmentTests;
+            constexpr auto dst_access = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                                        vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
 
-            vk::AccessFlags2 dst_access = vk::AccessFlagBits2::eDepthStencilAttachmentRead;
-
-            if (vk::AttachmentLoadOp::eClear == attachment.LoadOp) {
-                dst_access |= vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
-            }
-
-            if (src_layout != dst_layout ||
-                src_stages != dst_stages ||
-                src_access != dst_access) {
+            if (NeedsImageBarrier(src_access, dst_access, src_layout, dst_layout)) {
                 barrier_merger.put_image_barrier(
                     image_state.Handle,
                     src_layout,
@@ -728,8 +765,7 @@ namespace Ignis {
             const auto dst_stages = stages;
             const auto dst_access = GetBufferReadAccess(buffer_state.Usage, stages);
 
-            if (src_stages != dst_stages ||
-                src_access != dst_access) {
+            if (NeedsBufferBarrier(src_access, dst_access)) {
                 barrier_merger.put_buffer_barrier(
                     buffer_state.Handle,
                     offset,
@@ -804,7 +840,6 @@ namespace Ignis {
         ExecuteFn execute_fn =
             [=](const vk::CommandBuffer command_buffer) mutable {
                 Vulkan::BeginDebugUtilsLabel(command_buffer, render_pass_label, render_pass_label_color);
-
                 Vulkan::BeginRenderPass(
                     render_pass_extent,
                     render_pass_color_attachments,
@@ -830,7 +865,6 @@ namespace Ignis {
                 render_pass_execute_fn(command_buffer);
 
                 Vulkan::EndRenderPass(command_buffer);
-
                 Vulkan::EndDebugUtilsLabel(command_buffer);
             };
 
@@ -862,9 +896,7 @@ namespace Ignis {
                     const auto dst_stages = stage;
                     const auto dst_access = GetImageReadAccess(image_state.Usage, dst_stages);
 
-                    if (src_layout != dst_layout ||
-                        src_stage != dst_stages ||
-                        src_access != dst_access) {
+                    if (NeedsImageBarrier(src_access, dst_access, src_layout, dst_layout)) {
                         barrier_merger.put_image_barrier(
                             image_state.Handle,
                             src_layout,
@@ -893,9 +925,7 @@ namespace Ignis {
                     const auto dst_stages = stage;
                     const auto dst_access = GetImageWriteAccess(image_state.Usage, dst_stages);
 
-                    if (src_layout != dst_layout ||
-                        src_stage != dst_stages ||
-                        src_access != dst_access) {
+                    if (NeedsImageBarrier(src_access, dst_access, src_layout, dst_layout)) {
                         barrier_merger.put_image_barrier(
                             image_state.Handle,
                             src_layout,
@@ -927,8 +957,7 @@ namespace Ignis {
                     const auto dst_stages = stages;
                     const auto dst_access = GetBufferReadAccess(buffer_state.Usage, dst_stages);
 
-                    if (src_stages != dst_stages ||
-                        src_access != dst_access) {
+                    if (NeedsBufferBarrier(src_access, dst_access)) {
                         barrier_merger.put_buffer_barrier(
                             buffer_state.Handle,
                             offset,
@@ -953,8 +982,7 @@ namespace Ignis {
                     const auto dst_stages = stages;
                     const auto dst_access = GetBufferWriteAccess(buffer_state.Usage, dst_stages);
 
-                    if (src_stages != dst_stages ||
-                        src_access != dst_access) {
+                    if (NeedsBufferBarrier(src_access, dst_access)) {
                         barrier_merger.put_buffer_barrier(
                             buffer_state.Handle,
                             offset,

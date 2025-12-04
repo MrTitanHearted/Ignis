@@ -114,6 +114,15 @@ namespace Ignis {
         };
 
        public:
+        static bool IsWriteAccess(vk::AccessFlags2 access);
+        static bool NeedsMemoryBarrier(vk::AccessFlags2 src, vk::AccessFlags2 dst);
+        static bool NeedsImageBarrier(
+            vk::AccessFlags2 src_access,
+            vk::AccessFlags2 dst_access,
+            vk::ImageLayout  src_layout,
+            vk::ImageLayout  dst_layout);
+        static bool NeedsBufferBarrier(vk::AccessFlags2 src, vk::AccessFlags2 dst);
+
         static vk::AccessFlags2 GetImageReadAccess(vk::ImageUsageFlags usage, vk::PipelineStageFlags2 stages);
         static vk::AccessFlags2 GetImageWriteAccess(vk::ImageUsageFlags usage, vk::PipelineStageFlags2 stages);
         static vk::AccessFlags2 GetBufferReadAccess(vk::BufferUsageFlags usage, vk::PipelineStageFlags2 stages);
