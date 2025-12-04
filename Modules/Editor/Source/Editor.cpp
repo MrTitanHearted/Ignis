@@ -7,25 +7,12 @@ namespace Ignis {
         return false;
     }
 
-    // ReSharper disable once CppDFAConstantFunctionResult
-    bool Editor::OnWindowKeyInput(const WindowKeyEvent &event) {
-        if (KeyAction::ePress != event.Action)
-            return false;
-
-        if (KeyCode::eF == event.Key)
-            if (Window::IsFullscreen())
-                Window::MakeWindowed();
-            else
-                Window::MakeFullscreen();
-
-        return false;
-    }
-
     Editor::Editor(const Settings &settings) {
         attachCallback<WindowCloseEvent>(OnWindowClose);
-        attachCallback<WindowKeyEvent>(OnWindowKeyInput);
+        attachCallback<WindowKeyEvent>(&Editor::onKeyEvent);
         attachCallback<WindowMouseMoveEvent>(&Editor::onMouseMove);
         attachCallback<WindowMouseScrollEvent>(&Editor::onMouseScroll);
+        attachCallback<WindowMouseButtonEvent>(&Editor::onMouseButtonEvent);
 
         Engine &engine = Engine::GetRef();
 
@@ -45,18 +32,20 @@ namespace Ignis {
     }
 
     void Editor::onUpdate(const double dt) {
-        if (Window::IsKeyDown(KeyCode::eW))
-            m_Camera.processCameraMovement(Camera::Direction::eForward, dt);
-        else if (Window::IsKeyDown(KeyCode::eS))
-            m_Camera.processCameraMovement(Camera::Direction::eBackward, dt);
-        else if (Window::IsKeyDown(KeyCode::eA))
-            m_Camera.processCameraMovement(Camera::Direction::eLeft, dt);
-        else if (Window::IsKeyDown(KeyCode::eD))
-            m_Camera.processCameraMovement(Camera::Direction::eRight, dt);
-        else if (Window::IsKeyDown(KeyCode::eQ))
-            m_Camera.processCameraMovement(Camera::Direction::eWorldDown, dt);
-        else if (Window::IsKeyDown(KeyCode::eE))
-            m_Camera.processCameraMovement(Camera::Direction::eWorldUp, dt);
+        if (m_Play) {
+            if (Window::IsKeyDown(KeyCode::eW))
+                m_Camera.processCameraMovement(Camera::Direction::eForward, dt);
+            else if (Window::IsKeyDown(KeyCode::eS))
+                m_Camera.processCameraMovement(Camera::Direction::eBackward, dt);
+            else if (Window::IsKeyDown(KeyCode::eA))
+                m_Camera.processCameraMovement(Camera::Direction::eLeft, dt);
+            else if (Window::IsKeyDown(KeyCode::eD))
+                m_Camera.processCameraMovement(Camera::Direction::eRight, dt);
+            else if (Window::IsKeyDown(KeyCode::eQ))
+                m_Camera.processCameraMovement(Camera::Direction::eWorldDown, dt);
+            else if (Window::IsKeyDown(KeyCode::eE))
+                m_Camera.processCameraMovement(Camera::Direction::eWorldUp, dt);
+        }
 
         const float width  = m_ViewportImage.Extent.width;
         const float height = m_ViewportImage.Extent.height;
@@ -72,6 +61,11 @@ namespace Ignis {
     void Editor::onGUI(AGUISystem *ui_system) {
         const auto im_gui = static_cast<ImGuiSystem *>(ui_system);
         ImGui::Begin("Ignis::EditorLayer::Toolbox");
+
+        if (ImGui::Button("Play")) {
+            m_Play = true;
+            ImGui_ImplGlfw_RestoreCallbacks(Window::GetHandle());
+        }
 
         ImGui::End();
 
@@ -371,15 +365,42 @@ namespace Ignis {
         Vulkan::DestroyDescriptorSetLayout(m_DescriptorLayout);
     }
 
+    bool Editor::onKeyEvent(const WindowKeyEvent &event) {
+        if (KeyAction::ePress != event.Action)
+            return false;
+
+        if (KeyCode::eF == event.Key)
+            if (Window::IsFullscreen())
+                Window::MakeWindowed();
+            else
+                Window::MakeFullscreen();
+
+        if (!m_Play)
+            return false;
+
+        if (KeyCode::eEscape == event.Key &&
+            CursorMode::eNormal == Window::GetCursorMode()) {
+            ImGui_ImplGlfw_InstallCallbacks(Window::GetHandle());
+            m_Play = false;
+
+            const auto [mouse_x, mouse_y] = Window::GetMousePosition();
+
+            m_LastMouseX = mouse_x;
+            m_LastMouseY = mouse_y;
+        }
+
+        return false;
+    }
+
     bool Editor::onMouseMove(const WindowMouseMoveEvent &event) {
-        static double previous_x = event.X;
-        static double previous_y = event.Y;
+        if (!m_Play || CursorMode::eNormal == Window::GetCursorMode())
+            return false;
 
-        const double x_offset = event.X - previous_x;
-        const double y_offset = event.Y - previous_y;
+        const double x_offset = event.X - m_LastMouseX;
+        const double y_offset = event.Y - m_LastMouseY;
 
-        previous_x = event.X;
-        previous_y = event.Y;
+        m_LastMouseX = event.X;
+        m_LastMouseY = event.Y;
 
         m_Camera.processMouseMovement(x_offset, -y_offset);
 
@@ -387,7 +408,33 @@ namespace Ignis {
     }
 
     bool Editor::onMouseScroll(const WindowMouseScrollEvent &event) {
+        if (!m_Play || CursorMode::eNormal == Window::GetCursorMode())
+            return false;
         m_Camera.processMouseScroll(event.YOffset);
+        return false;
+    }
+
+    bool Editor::onMouseButtonEvent(const WindowMouseButtonEvent &event) {
+        if (KeyAction::ePress != event.Action)
+            return false;
+
+        if (!m_Play)
+            return false;
+
+        if (MouseButton::eLeft == event.Button) {
+            const auto [x, y] = Window::GetMousePosition();
+
+            m_LastMouseX = x;
+            m_LastMouseY = y;
+            Window::SetCursorMode(CursorMode::eDisabled);
+        } else if (MouseButton::eRight == event.Button) {
+            Window::SetCursorMode(CursorMode::eNormal);
+            const auto [x, y] = Window::GetMousePosition();
+
+            m_LastMouseX = x;
+            m_LastMouseY = y;
+        }
+
         return false;
     }
 }  // namespace Ignis

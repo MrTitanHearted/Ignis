@@ -12,7 +12,6 @@ namespace Ignis {
 
        public:
         static bool OnWindowClose(const WindowCloseEvent &);
-        static bool OnWindowKeyInput(const WindowKeyEvent &event);
 
        public:
         explicit Editor(const Settings &settings);
@@ -30,10 +29,18 @@ namespace Ignis {
         void createGraphicsPipeline(FrameGraph &frame_graph);
         void destroyGraphicsPipeline(FrameGraph &frame_graph);
 
+        bool onKeyEvent(const WindowKeyEvent &event);
         bool onMouseMove(const WindowMouseMoveEvent &event);
         bool onMouseScroll(const WindowMouseScrollEvent &event);
+        bool onMouseButtonEvent(const WindowMouseButtonEvent &event);
 
        private:
+        float  m_LastMouseX;
+        float  m_LastMouseY;
+        Camera m_Camera;
+
+        bool m_Play;
+
         Vulkan::Image m_ViewportImage;
         vk::ImageView m_ViewportView;
         vk::Extent2D  m_ViewportExtent;
@@ -44,8 +51,6 @@ namespace Ignis {
         vk::DescriptorSet   m_ViewportDescriptor;
         FrameGraph::ImageID m_ViewportImageID{};
         FrameGraph::ImageID m_DepthImageID{};
-
-        Camera m_Camera;
 
         vk::DescriptorSetLayout m_DescriptorLayout;
         vk::PipelineLayout      m_PipelineLayout;
