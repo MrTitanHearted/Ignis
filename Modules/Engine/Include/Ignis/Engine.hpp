@@ -7,10 +7,8 @@
 #include <Ignis/Vulkan.hpp>
 #include <Ignis/Render.hpp>
 
-#include <Ignis/Engine/IGUISystem.hpp>
+#include <Ignis/Engine/GUISystem.hpp>
 #include <Ignis/Engine/Layer.hpp>
-
-#include <Ignis/GPUScenes/BlinnPhong.hpp>
 
 namespace Ignis {
     class Engine {
@@ -20,7 +18,7 @@ namespace Ignis {
             Vulkan::Settings VulkanSettings{};
             Render::Settings RenderSettings{};
 
-            std::unique_ptr<IGUISystem> UISystem = nullptr;
+            std::unique_ptr<AGUISystem> UISystem = nullptr;
         };
 
        public:
@@ -38,15 +36,15 @@ namespace Ignis {
 
         bool isRunning() const;
 
-        IGUISystem *getUISystem() const;
+        AGUISystem *getUISystem() const;
 
         FrameGraph &getFrameGraph();
 
         template <typename TUISystem>
-            requires(std::is_base_of_v<IGUISystem, TUISystem>)
+            requires(std::is_base_of_v<AGUISystem, TUISystem>)
         TUISystem *getUISystem() const {
             DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized.");
-            IGUISystem *ui_system = m_UISystem.get();
+            AGUISystem *ui_system = m_GUISystem.get();
             return dynamic_cast<TUISystem *>(ui_system);
         }
 
@@ -97,12 +95,13 @@ namespace Ignis {
         Vulkan m_Vulkan;
         Render m_Render;
 
-        std::unique_ptr<IGUISystem> m_UISystem;
+        std::unique_ptr<AGUISystem> m_GUISystem;
 
         std::vector<std::unique_ptr<ALayer>>        m_LayerStack;
         gtl::flat_hash_map<std::type_index, size_t> m_LayerLookUp;
 
        private:
+        friend class AGUISystem;
         friend class ALayer;
 
        private:
@@ -112,4 +111,5 @@ namespace Ignis {
     };
 }  // namespace Ignis
 
+#include <Ignis/Engine/GUISystemImpl.hpp>
 #include <Ignis/Engine/LayerImpl.hpp>

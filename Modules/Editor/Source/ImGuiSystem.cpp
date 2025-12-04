@@ -1,7 +1,7 @@
 #include <Ignis/ImGuiSystem.hpp>
 
 namespace Ignis {
-    void ImGuiSystem::initialize() {
+    void ImGuiSystem::onAttach() {
         const vk::Device device = Vulkan::GetDevice();
 
         m_DescriptorPool = Vulkan::CreateDescriptorPool(
@@ -48,7 +48,7 @@ namespace Ignis {
         DIGNIS_LOG_APPLICATION_INFO("Ignis::ImGui UISystem initialized.");
     }
 
-    void ImGuiSystem::release() {
+    void ImGuiSystem::onDetach() {
         Vulkan::WaitDeviceIdle();
 
         if (const ImGuiIO &io = ImGui::GetIO();
@@ -66,7 +66,7 @@ namespace Ignis {
         DIGNIS_LOG_APPLICATION_INFO("Ignis::ImGui UISystem released.");
     }
 
-    void ImGuiSystem::begin() {
+    void ImGuiSystem::onGUIBegin() {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
@@ -97,7 +97,7 @@ namespace Ignis {
         ImGui::End();
     }
 
-    void ImGuiSystem::end() {
+    void ImGuiSystem::onGUIEnd() {
         ImGui::EndFrame();
         ImGui::Render();
 
@@ -107,7 +107,7 @@ namespace Ignis {
         }
     }
 
-    void ImGuiSystem::render(FrameGraph &frame_graph) {
+    void ImGuiSystem::onRender(FrameGraph &frame_graph) {
         FrameGraph::RenderPass imgui_pass{
             "Ignis::ImGui UISystem RenderPass",
             {1.0f, 0.0f, 0.0f, 1.0f},
@@ -157,5 +157,4 @@ namespace Ignis {
         m_ImageIDs.pop_back();
         m_ImageLookUp.erase(id);
     }
-
 }  // namespace Ignis

@@ -46,10 +46,10 @@ namespace Ignis {
                 m_Position -= m_WorldUp * speed;
                 break;
             case Direction::eRight:
-                m_Position += m_Right;
+                m_Position += m_Right * speed;
                 break;
             case Direction::eLeft:
-                m_Position -= m_Right;
+                m_Position -= m_Right * speed;
                 break;
         }
     }

@@ -4,35 +4,38 @@
 #include <Ignis/Render.hpp>
 
 namespace Ignis {
-    class Engine;
-
-    class ALayer {
+    class AGUISystem {
        public:
-        ALayer(Engine *engine, std::type_index layer_id);
-        virtual ~ALayer() = default;
+        explicit AGUISystem(std::type_index type);
 
-       protected:
-        virtual void onUpdate(double dt) {}
+        virtual ~AGUISystem() {}
 
-        virtual void onGUI(AGUISystem *ui_system) {}
+        virtual void onAttach() {}
+
+        virtual void onDetach() {}
+
+        virtual void onGUIBegin() {}
+
+        virtual void onGUIEnd() {}
 
         virtual void onRender(FrameGraph &frame_graph) {}
 
-        template <typename TEvent, typename TLayer>
+       protected:
+        template <typename TEvent, typename TGUISystem>
             requires(std::is_base_of_v<IEvent, TEvent> &&
-                     std::is_base_of_v<ALayer, TLayer>)
-        void attachCallback(bool (TLayer::*method)(const TEvent &)) {
+                     std::is_base_of_v<AGUISystem, TGUISystem>)
+        void attachCallback(bool (TGUISystem::*method)(const TEvent &)) {
             attachCallback<TEvent>([this, method](const TEvent &event) {
-                return (static_cast<TLayer *>(this)->*method)(event);
+                return (static_cast<TGUISystem *>(this)->*method)(event);
             });
         }
 
-        template <typename TEvent, typename TLayer>
+        template <typename TEvent, typename TGUISystem>
             requires(std::is_base_of_v<IEvent, TEvent> &&
-                     std::is_base_of_v<ALayer, TLayer>)
-        void attachCallback(bool (TLayer::*method)(const TEvent &) const) const {
+                     std::is_base_of_v<AGUISystem, TGUISystem>)
+        void attachCallback(bool (TGUISystem::*method)(const TEvent &) const) const {
             attachCallback<TEvent>([this, method](const TEvent &event) {
-                return (static_cast<const TLayer *>(this)->*method)(event);
+                return (static_cast<const TGUISystem *>(this)->*method)(event);
             });
         }
 
@@ -48,21 +51,18 @@ namespace Ignis {
             requires(std::is_base_of_v<IEvent, TEvent>)
         void postEvent(Args &&...args) const;
 
-        void postTask(fu2::function<void()> &&task) const;
-
        private:
-        Engine *m_pEngine;
-
-        std::type_index m_LayerID;
+        std::type_index m_ID;
 
        private:
         friend class Engine;
     };
 
-    template <typename TLayer>
-    class ILayer : public ALayer {
+    template <typename TGUISystem>
+    class IGUISystem : public AGUISystem {
        public:
-        ILayer();
-        ~ILayer() override = default;
+        explicit IGUISystem();
+
+        ~IGUISystem() override {}
     };
 }  // namespace Ignis

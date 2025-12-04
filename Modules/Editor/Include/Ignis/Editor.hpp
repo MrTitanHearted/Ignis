@@ -20,12 +20,15 @@ namespace Ignis {
 
         void onUpdate(double dt) override;
 
-        void onGUI(IGUISystem *ui_system) override;
+        void onGUI(AGUISystem *ui_system) override;
         void onRender(FrameGraph &frame_graph) override;
 
        private:
         void createViewportImage(ImGuiSystem *im_gui, uint32_t width, uint32_t height, FrameGraph &frame_graph);
         void destroyViewportImage(ImGuiSystem *im_gui, FrameGraph &frame_graph);
+
+        void createGraphicsPipeline(FrameGraph &frame_graph);
+        void destroyGraphicsPipeline(FrameGraph &frame_graph);
 
         bool onMouseMove(const WindowMouseMoveEvent &event);
         bool onMouseScroll(const WindowMouseScrollEvent &event);
@@ -34,7 +37,6 @@ namespace Ignis {
         Vulkan::Image m_ViewportImage;
         vk::ImageView m_ViewportView;
         vk::Extent2D  m_ViewportExtent;
-        vk::Format    m_ViewportFormat;
 
         Vulkan::Image m_DepthImage;
         vk::ImageView m_DepthView;
@@ -43,10 +45,25 @@ namespace Ignis {
         FrameGraph::ImageID m_ViewportImageID{};
         FrameGraph::ImageID m_DepthImageID{};
 
-        glm::vec3 m_ViewportClearColor{};
-
         Camera m_Camera;
 
-        BlinnPhongScene *m_pScene = nullptr;
+        vk::DescriptorSetLayout m_DescriptorLayout;
+        vk::PipelineLayout      m_PipelineLayout;
+
+        vk::ShaderModule m_ShaderModule;
+        vk::Pipeline     m_Pipeline;
+
+        uint32_t m_IndicesCount;
+
+        Vulkan::Buffer m_VertexBuffer;
+        Vulkan::Buffer m_IndexBuffer;
+        Vulkan::Buffer m_UniformBuffer;
+
+        FrameGraph::BufferInfo m_VertexBufferInfo;
+        FrameGraph::BufferInfo m_IndexBufferInfo;
+        FrameGraph::BufferInfo m_UniformBufferInfo;
+
+        vk::DescriptorPool m_DescriptorPool;
+        vk::DescriptorSet  m_DescriptorSet;
     };
 }  // namespace Ignis

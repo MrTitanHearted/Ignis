@@ -114,6 +114,12 @@ namespace Ignis {
         };
 
        public:
+        static vk::AccessFlags2 GetImageReadAccess(vk::ImageUsageFlags usage, vk::PipelineStageFlags2 stages);
+        static vk::AccessFlags2 GetImageWriteAccess(vk::ImageUsageFlags usage, vk::PipelineStageFlags2 stages);
+        static vk::AccessFlags2 GetBufferReadAccess(vk::BufferUsageFlags usage, vk::PipelineStageFlags2 stages);
+        static vk::AccessFlags2 GetBufferWriteAccess(vk::BufferUsageFlags usage, vk::PipelineStageFlags2 stages);
+
+       public:
         ~FrameGraph() = default;
 
         void removeImage(ImageID image);
@@ -123,6 +129,7 @@ namespace Ignis {
             vk::Image           image,
             vk::ImageView       image_view,
             vk::Format          format,
+            vk::ImageUsageFlags usage,
             const vk::Extent3D &extent,
             vk::ImageLayout     current_layout,
             vk::ImageLayout     final_layout);
@@ -130,38 +137,31 @@ namespace Ignis {
             vk::Image           image,
             vk::ImageView       image_view,
             vk::Format          format,
+            vk::ImageUsageFlags usage,
             const vk::Extent2D &extent,
             vk::ImageLayout     current_layout,
             vk::ImageLayout     final_layout);
-        BufferID importBuffer(vk::Buffer buffer, uint64_t offset, uint64_t size);
-
-        ImageID importImageIfNotAdded(
-            vk::Image           image,
-            vk::ImageView       image_view,
-            vk::Format          format,
-            const vk::Extent3D &extent,
-            vk::ImageLayout     current_layout,
-            vk::ImageLayout     final_layout);
-        ImageID importImageIfNotAdded(
-            vk::Image           image,
-            vk::ImageView       image_view,
-            vk::Format          format,
-            const vk::Extent2D &extent,
-            vk::ImageLayout     current_layout,
-            vk::ImageLayout     final_layout);
-        BufferID importBufferIfNotAdded(vk::Buffer buffer, uint64_t offset, uint64_t size);
+        BufferID importBuffer(
+            vk::Buffer           buffer,
+            vk::BufferUsageFlags usage,
+            uint64_t             offset,
+            uint64_t             size);
 
         ImageID getImageID(vk::Image image) const;
         ImageID getImageID(vk::ImageView view) const;
 
         BufferID getBufferID(vk::Buffer buffer) const;
 
-        vk::Image     getImage(ImageID id) const;
-        vk::ImageView getImageView(ImageID id) const;
-        vk::Format    getImageFormat(ImageID id) const;
-        vk::Extent3D  getImageExtent(ImageID id) const;
+        vk::Image           getImage(ImageID id) const;
+        vk::ImageView       getImageView(ImageID id) const;
+        vk::Format          getImageFormat(ImageID id) const;
+        vk::ImageUsageFlags getImageUsage(ImageID id) const;
+        vk::Extent3D        getImageExtent(ImageID id) const;
 
-        vk::Buffer getBuffer(BufferID id) const;
+        vk::Buffer           getBuffer(BufferID id) const;
+        uint64_t             getBufferOffset(BufferID id) const;
+        uint64_t             getBufferSize(BufferID id) const;
+        vk::BufferUsageFlags getBufferUsage(BufferID id) const;
 
         ImageID getSwapchainImageID() const;
 
@@ -175,12 +175,16 @@ namespace Ignis {
             vk::Format      Format;
             vk::ImageLayout Layout;
             vk::Extent3D    Extent;
+
+            vk::ImageUsageFlags Usage;
         };
 
         struct BufferState {
             vk::Buffer Handle;
             uint64_t   Offset;
             uint64_t   Size;
+
+            vk::BufferUsageFlags Usage;
         };
 
         enum class PassType {
@@ -225,6 +229,7 @@ namespace Ignis {
             vk::Image           swapchain_image,
             vk::ImageView       swapchain_view,
             vk::Format          swapchain_format,
+            vk::ImageUsageFlags swapchain_usage,
             const vk::Extent2D &swapchain_extent);
 
         Executor endFrame();

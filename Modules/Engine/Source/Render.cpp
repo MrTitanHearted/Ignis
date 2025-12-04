@@ -187,6 +187,7 @@ namespace Ignis {
             Vulkan::GetSwapchainImage(swapchain_image_index),
             Vulkan::GetSwapchainImageView(swapchain_image_index),
             Vulkan::GetSwapchainFormat().format,
+            Vulkan::GetSwapchainUsageFlags(),
             Vulkan::GetSwapchainExtent());
 
         return true;

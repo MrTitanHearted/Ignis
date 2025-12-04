@@ -1,7 +1,7 @@
 #include <Ignis/Assets/FileAsset.hpp>
 
 namespace Ignis {
-    std::optional<FileAsset> FileAsset::TextFromPath(const std::filesystem::path &path) {
+    std::optional<FileAsset> FileAsset::LoadTextFromPath(const std::filesystem::path &path) {
         std::string spath = path.string();
 
         if (!std::filesystem::exists(path)) {
@@ -22,10 +22,10 @@ namespace Ignis {
 
         DIGNIS_LOG_ENGINE_INFO("Loaded an Ignis::FileAsset from path: '{}'", spath);
 
-        return FromContent(path, content);
+        return LoadFromMemory(path, content);
     }
 
-    std::optional<FileAsset> FileAsset::BinaryFromPath(const std::filesystem::path &path) {
+    std::optional<FileAsset> FileAsset::LoadBinaryFromPath(const std::filesystem::path &path) {
         std::string spath = path.string();
 
         if (!std::filesystem::exists(path)) {
@@ -46,10 +46,10 @@ namespace Ignis {
 
         DIGNIS_LOG_ENGINE_INFO("Loaded an Ignis::FileAsset from path: '{}'", spath);
 
-        return FromContent(path, content);
+        return LoadFromMemory(path, content);
     }
 
-    FileAsset FileAsset::FromContent(const std::filesystem::path &path, const std::string_view content) {
+    FileAsset FileAsset::LoadFromMemory(const std::filesystem::path &path, const std::string_view content) {
         FileAsset file_asset{};
         file_asset.m_Path    = path;
         file_asset.m_Content = content;

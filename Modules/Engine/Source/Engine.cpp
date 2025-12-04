@@ -19,8 +19,8 @@ namespace Ignis {
         m_Vulkan.initialize(settings.VulkanSettings);
         m_Render.initialize(settings.RenderSettings);
 
-        m_UISystem = std::move(settings.UISystem);
-        m_UISystem->initialize();
+        m_GUISystem = std::move(settings.UISystem);
+        m_GUISystem->onAttach();
 
         m_LayerStack.clear();
         m_LayerLookUp.clear();
@@ -40,8 +40,9 @@ namespace Ignis {
             m_LayerStack.pop_back();
         }
 
-        m_UISystem->release();
-        m_UISystem = nullptr;
+        m_Window.removeListener(m_GUISystem->m_ID);
+        m_GUISystem->onDetach();
+        m_GUISystem = nullptr;
 
         m_Render.shutdown();
         m_Vulkan.shutdown();
@@ -68,12 +69,12 @@ namespace Ignis {
             for (const auto &layer : m_LayerStack)
                 layer->onUpdate(m_DeltaTime);
 
-            m_UISystem->begin();
+            m_GUISystem->onGUIBegin();
 
             for (const auto &layer : m_LayerStack)
-                layer->onGUI(m_UISystem.get());
+                layer->onGUI(m_GUISystem.get());
 
-            m_UISystem->end();
+            m_GUISystem->onGUIEnd();
 
             if (!m_Render.beginFrame()) {
                 continue;
@@ -84,7 +85,7 @@ namespace Ignis {
             for (const auto &layer : m_LayerStack)
                 layer->onRender(frame_graph);
 
-            m_UISystem->render(frame_graph);
+            m_GUISystem->onRender(frame_graph);
 
             if (!m_Render.endFrame(frame_graph.endFrame())) {
                 continue;
@@ -102,9 +103,9 @@ namespace Ignis {
         return m_IsRunning.load();
     }
 
-    IGUISystem *Engine::getUISystem() const {
+    AGUISystem *Engine::getUISystem() const {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized");
-        return m_UISystem.get();
+        return m_GUISystem.get();
     }
 
     FrameGraph &Engine::getFrameGraph() {

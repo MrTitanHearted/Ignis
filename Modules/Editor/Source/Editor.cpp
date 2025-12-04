@@ -27,15 +27,10 @@ namespace Ignis {
         attachCallback<WindowMouseMoveEvent>(&Editor::onMouseMove);
         attachCallback<WindowMouseScrollEvent>(&Editor::onMouseScroll);
 
-        m_ViewportClearColor = glm::vec3{0.0f};
-
         Engine &engine = Engine::GetRef();
 
         createViewportImage(engine.getUISystem<ImGuiSystem>(), 1, 1, engine.getFrameGraph());
-
-        m_pScene = Render::GetRef().addGPUScene<BlinnPhongScene>(m_ViewportFormat, m_DepthImage.Format);
-
-        m_pScene->loadModel("Assets/Models/vanguard/flair.fbx", engine.getFrameGraph());
+        createGraphicsPipeline(engine.getFrameGraph());
 
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor attached");
     }
@@ -43,25 +38,13 @@ namespace Ignis {
     Editor::~Editor() {
         Vulkan::WaitDeviceIdle();
 
-        Render::GetRef().removeGPUScene<BlinnPhongScene>();
-
         Engine &engine = Engine::GetRef();
+        destroyGraphicsPipeline(engine.getFrameGraph());
         destroyViewportImage(engine.getUISystem<ImGuiSystem>(), engine.getFrameGraph());
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor detached");
     }
 
     void Editor::onUpdate(const double dt) {
-        const float width = Window::GetWidth();
-        const float height = Window::GetHeight();
-
-        m_pScene->updateSceneCamera(BlinnPhongScene::Camera {
-            m_Camera.getProjection(width / height),
-            m_Camera.getView(),
-        });
-
-        if (CursorMode::eDisabled != Window::GetCursorMode())
-            return;
-
         if (Window::IsKeyDown(KeyCode::eW))
             m_Camera.processCameraMovement(Camera::Direction::eForward, dt);
         else if (Window::IsKeyDown(KeyCode::eS))
@@ -74,13 +57,21 @@ namespace Ignis {
             m_Camera.processCameraMovement(Camera::Direction::eWorldDown, dt);
         else if (Window::IsKeyDown(KeyCode::eE))
             m_Camera.processCameraMovement(Camera::Direction::eWorldUp, dt);
+
+        const float width  = m_ViewportImage.Extent.width;
+        const float height = m_ViewportImage.Extent.height;
+        const float aspect = width / height;
+
+        const glm::mat4x4 camera_data[]{
+            m_Camera.getProjection(aspect),
+            m_Camera.getView(),
+        };
+        Vulkan::CopyMemoryToAllocation(camera_data, m_UniformBuffer.Allocation, 0, sizeof(camera_data));
     }
 
-    void Editor::onGUI(IGUISystem *ui_system) {
+    void Editor::onGUI(AGUISystem *ui_system) {
         const auto im_gui = static_cast<ImGuiSystem *>(ui_system);
         ImGui::Begin("Ignis::EditorLayer::Toolbox");
-
-        ImGui::ColorEdit3("Viewport Clear Color", &m_ViewportClearColor.r);
 
         ImGui::End();
 
@@ -107,15 +98,14 @@ namespace Ignis {
     void Editor::onRender(FrameGraph &frame_graph) {
         FrameGraph::RenderPass editor_pass{
             "Ignis::EditorLayer::RenderPass",
-            {m_ViewportClearColor.r, m_ViewportClearColor.g, m_ViewportClearColor.b, 1.0f},
+            {0.0f, 1.0f, 0.0f, 1.0f},
         };
 
-        m_pScene->onRender(editor_pass);
-
         editor_pass
+            .readBuffers({m_VertexBufferInfo, m_IndexBufferInfo, m_UniformBufferInfo})
             .setColorAttachments({FrameGraph::Attachment{
                 m_ViewportImageID,
-                vk::ClearColorValue{m_ViewportClearColor.r, m_ViewportClearColor.g, m_ViewportClearColor.b, 1.0f},
+                vk::ClearColorValue{0.0f, 0.0f, 0.0f, 1.0f},
                 vk::AttachmentLoadOp::eClear,
                 vk::AttachmentStoreOp::eStore,
             }})
@@ -126,7 +116,14 @@ namespace Ignis {
                 vk::AttachmentStoreOp::eStore,
             })
             .setExecute([this](const vk::CommandBuffer command_buffer) {
-                m_pScene->onDraw(command_buffer);
+                command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Pipeline);
+                command_buffer.bindDescriptorSets(
+                    vk::PipelineBindPoint::eGraphics,
+                    m_PipelineLayout, 0,
+                    {m_DescriptorSet}, {});
+                command_buffer.bindVertexBuffers(0, {m_VertexBuffer.Handle}, {0});
+                command_buffer.bindIndexBuffer(m_IndexBuffer.Handle, 0, vk::IndexType::eUint32);
+                command_buffer.drawIndexed(m_IndicesCount, 1, 0, 0, 0);
             });
 
         frame_graph.addRenderPass(std::move(editor_pass));
@@ -137,8 +134,6 @@ namespace Ignis {
         const uint32_t width,
         const uint32_t height,
         FrameGraph    &frame_graph) {
-        m_ViewportFormat = vk::Format::eR32G32B32A32Sfloat;
-
         m_ViewportExtent
             .setWidth(width)
             .setHeight(height);
@@ -147,14 +142,14 @@ namespace Ignis {
             {},
             vma::MemoryUsage::eGpuOnly,
             {},
-            m_ViewportFormat,
+            vk::Format::eR32G32B32A32Sfloat,
             vk::ImageUsageFlagBits::eColorAttachment |
                 vk::ImageUsageFlagBits::eSampled |
                 vk::ImageUsageFlagBits::eTransferSrc |
                 vk::ImageUsageFlagBits::eTransferDst,
             m_ViewportExtent);
 
-        m_ViewportView = Vulkan::CreateImageColorView2D(m_ViewportImage.Handle, m_ViewportFormat);
+        m_ViewportView = Vulkan::CreateImageColorView2D(m_ViewportImage.Handle, m_ViewportImage.Format);
 
         m_DepthImage = Vulkan::AllocateImage2D(
             {}, vma::MemoryUsage::eGpuOnly, {},
@@ -188,7 +183,8 @@ namespace Ignis {
         m_ViewportImageID = frame_graph.importImage(
             m_ViewportImage.Handle,
             m_ViewportView,
-            m_ViewportFormat,
+            m_ViewportImage.Format,
+            m_ViewportImage.UsageFlags,
             m_ViewportExtent,
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal);
@@ -197,6 +193,7 @@ namespace Ignis {
             m_DepthImage.Handle,
             m_DepthView,
             m_DepthImage.Format,
+            m_DepthImage.UsageFlags,
             m_ViewportExtent,
             vk::ImageLayout::eDepthAttachmentOptimal,
             vk::ImageLayout::eDepthAttachmentOptimal);
@@ -219,15 +216,170 @@ namespace Ignis {
         m_ViewportView = nullptr;
     }
 
-    bool Editor::onMouseMove(const WindowMouseMoveEvent &event) {
-        if (CursorMode::eDisabled != Window::GetCursorMode())
-            return false;
+    void Editor::createGraphicsPipeline(FrameGraph &frame_graph) {
+        struct Vertex {
+            glm::vec3 Position;
+            glm::vec3 Color;
+        };
 
+        const FileAsset        shader_file   = FileAsset::LoadBinaryFromPath("Assets/Shaders/Triangle.spv").value();
+        const std::string_view shader_source = shader_file.getContent();
+        std::vector<uint32_t>  shader_code{};
+
+        shader_code.resize(shader_source.size() / sizeof(uint32_t));
+        std::memcpy(shader_code.data(), shader_source.data(), shader_source.size());
+
+        m_DescriptorLayout =
+            Vulkan::DescriptorSetLayoutBuilder()
+                .addUniformBuffer(0, vk::ShaderStageFlagBits::eVertex)
+                .build();
+        m_PipelineLayout = Vulkan::CreatePipelineLayout({}, {m_DescriptorLayout});
+
+        m_ShaderModule = Vulkan::CreateShaderModuleFromSPV(shader_code);
+        m_Pipeline =
+            Vulkan::GraphicsPipelineBuilder()
+                .setVertexShader("vs_main", m_ShaderModule)
+                .setFragmentShader("fs_main", m_ShaderModule)
+                .setVertexLayouts({Vulkan::VertexLayout{
+                    vk::VertexInputBindingDescription{0, sizeof(Vertex), vk::VertexInputRate::eVertex},
+                    {
+                        vk::VertexInputAttributeDescription{0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, Position)},
+                        vk::VertexInputAttributeDescription{1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, Color)},
+                    },
+                }})
+                .setInputTopology(vk::PrimitiveTopology::eTriangleList)
+                .setPolygonMode(vk::PolygonMode::eFill)
+                .setCullMode(vk::CullModeFlagBits::eNone, vk::FrontFace::eCounterClockwise)
+                .setColorAttachmentFormats({m_ViewportImage.Format})
+                .setDepthAttachmentFormat(m_DepthImage.Format)
+                .setDepthTest(true, vk::CompareOp::eLess)
+                .setBlendingAdditive()
+                .setBlendingAlphaBlended()
+                .setNoMultisampling()
+                .setNoBlending()
+                .build(m_PipelineLayout);
+
+        constexpr Vertex vertices[]{
+            Vertex{glm::vec3(-1.0f, -1.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f)},
+            Vertex{glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
+            Vertex{glm::vec3(1.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)},
+        };
+
+        constexpr uint32_t indices[]{0, 1, 2};
+
+        m_IndicesCount = sizeof(indices) / sizeof(uint32_t);
+
+        m_VertexBuffer =
+            Vulkan::AllocateBuffer(
+                {}, vma::MemoryUsage::eGpuOnly, {},
+                sizeof(vertices),
+                vk::BufferUsageFlagBits::eVertexBuffer |
+                    vk::BufferUsageFlagBits::eTransferDst);
+        m_IndexBuffer =
+            Vulkan::AllocateBuffer(
+                {}, vma::MemoryUsage::eGpuOnly, {},
+                sizeof(indices),
+                vk::BufferUsageFlagBits::eIndexBuffer |
+                    vk::BufferUsageFlagBits::eTransferDst);
+        m_UniformBuffer =
+            Vulkan::AllocateBuffer(
+                vma::AllocationCreateFlagBits::eMapped,
+                vma::MemoryUsage::eCpuOnly, {},
+                sizeof(glm::mat4x4) * 2,
+                vk::BufferUsageFlagBits::eUniformBuffer);
+
+        {
+            const Vulkan::Buffer staging_buffer =
+                Vulkan::AllocateBuffer(
+                    vma::AllocationCreateFlagBits::eMapped,
+                    vma::MemoryUsage::eCpuOnly, {},
+                    m_VertexBuffer.Size + m_IndexBuffer.Size,
+                    vk::BufferUsageFlagBits::eTransferSrc);
+
+            Vulkan::CopyMemoryToAllocation(vertices, staging_buffer.Allocation, 0, m_VertexBuffer.Size);
+            Vulkan::CopyMemoryToAllocation(indices, staging_buffer.Allocation, m_VertexBuffer.Size, m_IndexBuffer.Size);
+
+            Render::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
+                Vulkan::CopyBufferToBuffer(
+                    staging_buffer.Handle,
+                    m_VertexBuffer.Handle,
+                    0, 0, m_VertexBuffer.Size,
+                    command_buffer);
+                Vulkan::CopyBufferToBuffer(
+                    staging_buffer.Handle,
+                    m_IndexBuffer.Handle,
+                    m_VertexBuffer.Size, 0,
+                    m_IndexBuffer.Size,
+                    command_buffer);
+            });
+
+            Vulkan::DestroyBuffer(staging_buffer);
+        }
+
+        m_VertexBufferInfo = FrameGraph::BufferInfo{
+            frame_graph.importBuffer(m_VertexBuffer.Handle, m_VertexBuffer.UsageFlags, 0, m_VertexBuffer.Size),
+            0,
+            m_VertexBuffer.Size,
+            vk::PipelineStageFlagBits2::eVertexInput,
+        };
+
+        m_IndexBufferInfo = FrameGraph::BufferInfo{
+            frame_graph.importBuffer(m_IndexBuffer.Handle, m_IndexBuffer.UsageFlags, 0, m_IndexBuffer.Size),
+            0,
+            m_IndexBuffer.Size,
+            vk::PipelineStageFlagBits2::eVertexInput,
+        };
+
+        m_UniformBufferInfo = FrameGraph::BufferInfo{
+            frame_graph.importBuffer(m_UniformBuffer.Handle, m_UniformBuffer.UsageFlags, 0, m_UniformBuffer.Size),
+            0,
+            m_UniformBuffer.Size,
+            vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader,
+        };
+
+        m_DescriptorPool = Vulkan::CreateDescriptorPool(
+            {},
+            100,
+            {
+                vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 100},
+            });
+
+        m_DescriptorSet = Vulkan::AllocateDescriptorSet(m_DescriptorLayout, m_DescriptorPool);
+
+        Vulkan::DescriptorSetWriter()
+            .writeUniformBuffer(0, m_UniformBuffer.Handle, 0, m_UniformBuffer.Size)
+            .update(m_DescriptorSet);
+    }
+
+    void Editor::destroyGraphicsPipeline(FrameGraph &frame_graph) {
+        Vulkan::DestroyDescriptorPool(m_DescriptorPool);
+
+        m_DescriptorSet = nullptr;
+
+        frame_graph.removeBuffer(m_VertexBufferInfo.Buffer);
+        frame_graph.removeBuffer(m_IndexBufferInfo.Buffer);
+        frame_graph.removeBuffer(m_UniformBufferInfo.Buffer);
+
+        Vulkan::DestroyBuffer(m_VertexBuffer);
+        Vulkan::DestroyBuffer(m_IndexBuffer);
+        Vulkan::DestroyBuffer(m_UniformBuffer);
+
+        Vulkan::DestroyPipeline(m_Pipeline);
+        Vulkan::DestroyShaderModule(m_ShaderModule);
+
+        Vulkan::DestroyPipelineLayout(m_PipelineLayout);
+        Vulkan::DestroyDescriptorSetLayout(m_DescriptorLayout);
+    }
+
+    bool Editor::onMouseMove(const WindowMouseMoveEvent &event) {
         static double previous_x = event.X;
         static double previous_y = event.Y;
 
         const double x_offset = event.X - previous_x;
         const double y_offset = event.Y - previous_y;
+
+        previous_x = event.X;
+        previous_y = event.Y;
 
         m_Camera.processMouseMovement(x_offset, -y_offset);
 
@@ -235,8 +387,6 @@ namespace Ignis {
     }
 
     bool Editor::onMouseScroll(const WindowMouseScrollEvent &event) {
-        if (CursorMode::eDisabled != Window::GetCursorMode())
-            return false;
         m_Camera.processMouseScroll(event.YOffset);
         return false;
     }

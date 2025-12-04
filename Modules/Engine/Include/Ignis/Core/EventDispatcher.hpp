@@ -134,10 +134,6 @@ namespace Ignis {
         }
 
         void removeListener(const std::type_index listener_id) {
-            DIGNIS_ASSERT(
-                m_ListenerEventTypes.contains(listener_id),
-                "Ignis::EventDispatcher::removeListener: Listener '{}' is not added.",
-                listener_id.name());
             for (const auto &event_type : m_ListenerEventTypes[listener_id]) {
                 m_Registries[event_type]->removeListener(listener_id);
             }

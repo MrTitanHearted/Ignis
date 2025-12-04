@@ -5,10 +5,10 @@
 namespace Ignis {
     class FileAsset {
        public:
-        static std::optional<FileAsset> TextFromPath(const std::filesystem::path &path);
-        static std::optional<FileAsset> BinaryFromPath(const std::filesystem::path &path);
+        static std::optional<FileAsset> LoadTextFromPath(const std::filesystem::path &path);
+        static std::optional<FileAsset> LoadBinaryFromPath(const std::filesystem::path &path);
 
-        static FileAsset FromContent(const std::filesystem::path &path, std::string_view content);
+        static FileAsset LoadFromMemory(const std::filesystem::path &path, std::string_view content);
 
        public:
         FileAsset()  = default;

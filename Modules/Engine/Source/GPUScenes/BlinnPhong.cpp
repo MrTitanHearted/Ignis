@@ -19,7 +19,7 @@ namespace Ignis {
     }
 
     void BlinnPhongScene::initialize(FrameGraph &frame_graph) {
-        const FileAsset shader_file = FileAsset::BinaryFromPath("Assets/Shaders/Ignis/BlinnPhong.spv").value();
+        const FileAsset shader_file = FileAsset::LoadBinaryFromPath("Assets/Shaders/Ignis/BlinnPhong.spv").value();
 
         std::vector<uint32_t> shader_code{};
         shader_code.resize(shader_file.getContent().size() / sizeof(uint32_t));
@@ -550,6 +550,7 @@ namespace Ignis {
             image.Handle,
             view,
             image.Format,
+            image.UsageFlags,
             image.Extent,
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal);
@@ -592,7 +593,7 @@ namespace Ignis {
 
         m_VertexBuffers[handle] = buffer;
 
-        const FrameGraph::BufferID buffer_id = frame_graph.importBuffer(buffer.Handle, 0, buffer.Size);
+        const FrameGraph::BufferID buffer_id = frame_graph.importBuffer(buffer.Handle, buffer.UsageFlags, 0, buffer.Size);
 
         m_FrameGraphVertexBufferIDs.insert(
             handle,
@@ -621,7 +622,7 @@ namespace Ignis {
 
         m_IndexBuffers[handle] = buffer;
 
-        const FrameGraph::BufferID buffer_id = frame_graph.importBuffer(buffer.Handle, 0, buffer.Size);
+        const FrameGraph::BufferID buffer_id = frame_graph.importBuffer(buffer.Handle, buffer.UsageFlags, 0, buffer.Size);
 
         m_FrameGraphIndexBufferIDs.insert(
             handle,
@@ -650,7 +651,7 @@ namespace Ignis {
 
         m_Materials[handle] = buffer;
 
-        const FrameGraph::BufferID buffer_id = frame_graph.importBuffer(buffer.Handle, 0, buffer.Size);
+        const FrameGraph::BufferID buffer_id = frame_graph.importBuffer(buffer.Handle, buffer.UsageFlags, 0, buffer.Size);
 
         m_FrameGraphMaterialIDs.insert(
             handle,
@@ -680,7 +681,7 @@ namespace Ignis {
 
         m_Meshes[handle] = buffer;
 
-        const FrameGraph::BufferID buffer_id = frame_graph.importBuffer(buffer.Handle, 0, buffer.Size);
+        const FrameGraph::BufferID buffer_id = frame_graph.importBuffer(buffer.Handle, buffer.UsageFlags, 0, buffer.Size);
 
         m_FrameGraphMeshIDs.insert(
             handle,
@@ -710,7 +711,7 @@ namespace Ignis {
 
         m_Cameras[handle] = buffer;
 
-        const FrameGraph::BufferID buffer_id = frame_graph.importBuffer(buffer.Handle, 0, buffer.Size);
+        const FrameGraph::BufferID buffer_id = frame_graph.importBuffer(buffer.Handle, buffer.UsageFlags, 0, buffer.Size);
 
         m_FrameGraphCameraIDs.insert(
             handle, FrameGraph::BufferInfo{

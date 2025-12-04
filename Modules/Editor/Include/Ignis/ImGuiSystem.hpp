@@ -3,18 +3,18 @@
 #include <Ignis/Engine.hpp>
 
 namespace Ignis {
-    class ImGuiSystem final : public IGUISystem {
+    class ImGuiSystem final : public IGUISystem<ImGuiSystem> {
        public:
         ImGuiSystem()           = default;
         ~ImGuiSystem() override = default;
 
-        void initialize() override;
-        void release() override;
+        void onAttach() override;
+        void onDetach() override;
 
-        void begin() override;
-        void end() override;
+        void onGUIBegin() override;
+        void onGUIEnd() override;
 
-        void render(FrameGraph &frame_graph) override;
+        void onRender(FrameGraph &frame_graph) override;
 
         vk::DescriptorPool getDescriptorPool() const;
         vk::Sampler        getImageSampler() const;
