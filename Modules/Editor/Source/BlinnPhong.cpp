@@ -247,17 +247,21 @@ namespace Ignis {
                     vk::BufferUsageFlagBits::eTransferSrc |
                     vk::BufferUsageFlagBits::eTransferDst));
 
-        const Vulkan::Buffer &instance = m_StaticInstanceBuffers[handle];
+        const Vulkan::Buffer &instance_buffer = m_StaticInstanceBuffers[handle];
 
         m_FrameGraphStaticInstanceBuffers.insert(
             handle,
             FrameGraph::BufferInfo{
-                frame_graph.importBuffer(instance.Handle, instance.UsageFlags, 0, instance.Size),
+                frame_graph.importBuffer(instance_buffer.Handle, instance_buffer.UsageFlags, 0, instance_buffer.Size),
                 0,
-                instance.Size,
+                instance_buffer.Size,
                 vk::PipelineStageFlagBits2::eVertexShader |
                     vk::PipelineStageFlagBits2::eFragmentShader,
             });
+
+        Vulkan::DescriptorSetWriter()
+            .writeStorageBuffer(3, handle, instance_buffer.Handle, 0, instance_buffer.Size)
+            .update(m_DescriptorSet);
 
         m_LoadedStaticModels[model.Path] = handle;
 
@@ -427,9 +431,11 @@ namespace Ignis {
                 sizeof(StaticInstance) * handle,
                 sizeof(StaticInstance));
 
-            m_StaticInstanceToIndices[model][m_IndicesToStaticInstance[model][last_slot]] = slot;
+            const StaticInstanceHandle last_handle = m_IndicesToStaticInstance[model][last_slot];
 
-            m_IndicesToStaticInstance[model][m_StaticInstanceToIndices[model][slot]] = m_StaticInstanceToIndices[model][slot];
+            m_StaticInstanceToIndices[model][last_handle] = slot;
+
+            m_IndicesToStaticInstance[model][last_slot] = last_handle;
         }
 
         m_IndicesToStaticInstance[model].erase(last_slot);
