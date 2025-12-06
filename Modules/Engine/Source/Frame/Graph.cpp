@@ -1,4 +1,4 @@
-#include <Ignis/Render/FrameGraph.hpp>
+#include <Ignis/Frame/Graph.hpp>
 
 namespace Ignis {
     FrameGraph::RenderPass::RenderPass(
@@ -401,7 +401,7 @@ namespace Ignis {
         const uint64_t             size) {
         IGNIS_IF_DEBUG(IGNIS_ASSERT(!m_BufferMap.contains(buffer), "vk::Buffer already imported to the frame graph."));
 
-        BufferID buffer_id = INVALID_BUFFER_ID;
+        BufferID buffer_id = k_InvalidBufferID;
 
         if (!m_FreeBufferIDs.empty()) {
             buffer_id = m_FreeBufferIDs.back();
@@ -635,7 +635,7 @@ namespace Ignis {
 
             if (NeedsImageBarrier(src_access, dst_access, src_layout, dst_layout)) {
                 final_barriers
-                    .put_image_barrier(
+                    .putImageBarrier(
                         image_state.Handle,
                         src_layout,
                         dst_layout,
@@ -679,7 +679,7 @@ namespace Ignis {
             const auto     dst_access = GetImageReadAccess(image_state.Usage, dst_stages);
 
             if (NeedsImageBarrier(src_access, dst_access, src_layout, dst_layout)) {
-                barrier_merger.put_image_barrier(
+                barrier_merger.putImageBarrier(
                     image_state.Handle,
                     src_layout,
                     dst_layout,
@@ -711,7 +711,7 @@ namespace Ignis {
             }
 
             if (NeedsImageBarrier(src_access, dst_access, src_layout, dst_layout)) {
-                barrier_merger.put_image_barrier(
+                barrier_merger.putImageBarrier(
                     image_state.Handle,
                     src_layout,
                     dst_layout,
@@ -741,7 +741,7 @@ namespace Ignis {
                                         vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
 
             if (NeedsImageBarrier(src_access, dst_access, src_layout, dst_layout)) {
-                barrier_merger.put_image_barrier(
+                barrier_merger.putImageBarrier(
                     image_state.Handle,
                     src_layout,
                     dst_layout,
@@ -766,7 +766,7 @@ namespace Ignis {
             const auto dst_access = GetBufferReadAccess(buffer_state.Usage, stages);
 
             if (NeedsBufferBarrier(src_access, dst_access)) {
-                barrier_merger.put_buffer_barrier(
+                barrier_merger.putBufferBarrier(
                     buffer_state.Handle,
                     offset,
                     size,
@@ -897,7 +897,7 @@ namespace Ignis {
                     const auto dst_access = GetImageReadAccess(image_state.Usage, dst_stages);
 
                     if (NeedsImageBarrier(src_access, dst_access, src_layout, dst_layout)) {
-                        barrier_merger.put_image_barrier(
+                        barrier_merger.putImageBarrier(
                             image_state.Handle,
                             src_layout,
                             dst_layout,
@@ -926,7 +926,7 @@ namespace Ignis {
                     const auto dst_access = GetImageWriteAccess(image_state.Usage, dst_stages);
 
                     if (NeedsImageBarrier(src_access, dst_access, src_layout, dst_layout)) {
-                        barrier_merger.put_image_barrier(
+                        barrier_merger.putImageBarrier(
                             image_state.Handle,
                             src_layout,
                             dst_layout,
@@ -958,7 +958,7 @@ namespace Ignis {
                     const auto dst_access = GetBufferReadAccess(buffer_state.Usage, dst_stages);
 
                     if (NeedsBufferBarrier(src_access, dst_access)) {
-                        barrier_merger.put_buffer_barrier(
+                        barrier_merger.putBufferBarrier(
                             buffer_state.Handle,
                             offset,
                             size,
@@ -983,7 +983,7 @@ namespace Ignis {
                     const auto dst_access = GetBufferWriteAccess(buffer_state.Usage, dst_stages);
 
                     if (NeedsBufferBarrier(src_access, dst_access)) {
-                        barrier_merger.put_buffer_barrier(
+                        barrier_merger.putBufferBarrier(
                             buffer_state.Handle,
                             offset,
                             size,

@@ -63,4 +63,8 @@ namespace Ignis {
     std::string_view FileAsset::getContent() const {
         return m_Content;
     }
+
+    size_t FileAsset::getSize() const {
+        return m_Content.size();
+    }
 }  // namespace Ignis

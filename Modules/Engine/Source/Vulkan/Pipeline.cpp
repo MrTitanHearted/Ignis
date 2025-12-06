@@ -33,9 +33,10 @@ namespace Ignis {
         m_VertexInputBindingDescriptions.clear();
         m_VertexInputAttributeDescriptions.clear();
 
-        setNoDepthTest();
-        setNoBlending();
         setNoMultisampling();
+        setNoBlending();
+        setNoDepthTest();
+        setNoStencilTest();
     }
 
     Vulkan::GraphicsPipelineBuilder &Vulkan::GraphicsPipelineBuilder::setVertexShader(
@@ -112,18 +113,17 @@ namespace Ignis {
     }
 
     Vulkan::GraphicsPipelineBuilder &Vulkan::GraphicsPipelineBuilder::setDepthTest(
-        const bool          depth_write,
-        const vk::CompareOp op) {
+        const vk::Bool32    depth_write,
+        const vk::CompareOp op,
+        const float         min_bounds,
+        const float         max_bounds) {
         m_DepthStencil
             .setDepthTestEnable(vk::True)
-            .setDepthWriteEnable(depth_write ? vk::True : vk::False)
+            .setDepthWriteEnable(depth_write)
             .setDepthCompareOp(op)
-            .setMinDepthBounds(0.0f)
-            .setMaxDepthBounds(1.0f)
-            .setDepthBoundsTestEnable(vk::False)
-            .setStencilTestEnable(vk::False)
-            .setFront(vk::StencilOpState{})
-            .setBack(vk::StencilOpState{});
+            .setMinDepthBounds(min_bounds)
+            .setMaxDepthBounds(max_bounds)
+            .setDepthBoundsTestEnable(vk::False);
         return *this;
     }
 
@@ -186,7 +186,12 @@ namespace Ignis {
             .setDepthCompareOp(vk::CompareOp::eNever)
             .setMinDepthBounds(0.0f)
             .setMaxDepthBounds(1.0f)
-            .setDepthBoundsTestEnable(vk::False)
+            .setDepthBoundsTestEnable(vk::False);
+        return *this;
+    }
+
+    Vulkan::GraphicsPipelineBuilder &Vulkan::GraphicsPipelineBuilder::setNoStencilTest() {
+        m_DepthStencil
             .setStencilTestEnable(vk::False)
             .setFront(vk::StencilOpState{})
             .setBack(vk::StencilOpState{});

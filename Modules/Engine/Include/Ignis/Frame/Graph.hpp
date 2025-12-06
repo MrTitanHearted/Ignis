@@ -10,8 +10,8 @@ namespace Ignis {
 
         typedef fu2::function<void(vk::CommandBuffer)> ExecuteFn;
 
-        static constexpr ImageID  INVALID_IMAGE_ID  = UINT32_MAX;
-        static constexpr BufferID INVALID_BUFFER_ID = UINT32_MAX;
+        static constexpr ImageID  k_InvalidImageID  = UINT32_MAX;
+        static constexpr BufferID k_InvalidBufferID = UINT32_MAX;
 
        public:
         struct ImageInfo {
@@ -270,7 +270,7 @@ namespace Ignis {
         gtl::flat_hash_map<ImageID, vk::ImageLayout> m_FinalImageLayouts;
 
        private:
-        friend class Render;
+        friend class Frame;
         friend class Engine;
     };
 }  // namespace Ignis

@@ -3,7 +3,7 @@
 #include <Ignis/Engine.hpp>
 
 namespace Ignis {
-    class ImGuiSystem final : public IGUISystem<ImGuiSystem> {
+    class ImGuiSystem final : public GUISystem<ImGuiSystem> {
        public:
         ImGuiSystem()           = default;
         ~ImGuiSystem() override = default;

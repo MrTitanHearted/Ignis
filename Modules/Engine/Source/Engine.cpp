@@ -17,7 +17,7 @@ namespace Ignis {
 
         m_Window.initialize(settings.WindowSettings);
         m_Vulkan.initialize(settings.VulkanSettings);
-        m_Render.initialize(settings.RenderSettings);
+        m_Frame.initialize(settings.FrameSettings);
 
         m_GUISystem = std::move(settings.UISystem);
         m_GUISystem->onAttach();
@@ -44,7 +44,7 @@ namespace Ignis {
         m_GUISystem->onDetach();
         m_GUISystem = nullptr;
 
-        m_Render.shutdown();
+        m_Frame.shutdown();
         m_Vulkan.shutdown();
         m_Window.shutdown();
 
@@ -76,18 +76,18 @@ namespace Ignis {
 
             m_GUISystem->onGUIEnd();
 
-            if (!m_Render.beginFrame()) {
+            if (!m_Frame.begin()) {
                 continue;
             }
 
-            FrameGraph &frame_graph = m_Render.getFrameGraph();
+            FrameGraph &frame_graph = m_Frame.getFrameGraph();
 
             for (const auto &layer : m_LayerStack)
                 layer->onRender(frame_graph);
 
             m_GUISystem->onRender(frame_graph);
 
-            if (!m_Render.endFrame(frame_graph.endFrame())) {
+            if (!m_Frame.end(frame_graph.endFrame())) {
                 continue;
             }
         }
@@ -103,14 +103,9 @@ namespace Ignis {
         return m_IsRunning.load();
     }
 
-    AGUISystem *Engine::getUISystem() const {
-        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized");
-        return m_GUISystem.get();
-    }
-
     FrameGraph &Engine::getFrameGraph() {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized");
-        return m_Render.m_FrameGraph;
+        return m_Frame.m_FrameGraph;
     }
 
     IGNIS_IF_DEBUG(Engine::State::~State() {

@@ -1,26 +1,28 @@
 #pragma once
 
 #include <Ignis/Core.hpp>
-#include <Ignis/Render.hpp>
+#include <Ignis/Frame.hpp>
+
+#include <Ignis/Engine/GUISystem.hpp>
 
 namespace Ignis {
     class Engine;
 
-    class ALayer {
+    class ILayer {
        public:
-        ALayer(Engine *engine, std::type_index layer_id);
-        virtual ~ALayer() = default;
+        ILayer(Engine *engine, std::type_index layer_id);
+        virtual ~ILayer() = default;
 
        protected:
         virtual void onUpdate(double dt) {}
 
-        virtual void onGUI(AGUISystem *ui_system) {}
+        virtual void onGUI(IGUISystem *ui_system) {}
 
         virtual void onRender(FrameGraph &frame_graph) {}
 
         template <typename TEvent, typename TLayer>
             requires(std::is_base_of_v<IEvent, TEvent> &&
-                     std::is_base_of_v<ALayer, TLayer>)
+                     std::is_base_of_v<ILayer, TLayer>)
         void attachCallback(bool (TLayer::*method)(const TEvent &)) {
             attachCallback<TEvent>([this, method](const TEvent &event) {
                 return (static_cast<TLayer *>(this)->*method)(event);
@@ -29,7 +31,7 @@ namespace Ignis {
 
         template <typename TEvent, typename TLayer>
             requires(std::is_base_of_v<IEvent, TEvent> &&
-                     std::is_base_of_v<ALayer, TLayer>)
+                     std::is_base_of_v<ILayer, TLayer>)
         void attachCallback(bool (TLayer::*method)(const TEvent &) const) const {
             attachCallback<TEvent>([this, method](const TEvent &event) {
                 return (static_cast<const TLayer *>(this)->*method)(event);
@@ -60,9 +62,9 @@ namespace Ignis {
     };
 
     template <typename TLayer>
-    class ILayer : public ALayer {
+    class Layer : public ILayer {
        public:
-        ILayer();
-        ~ILayer() override = default;
+        Layer();
+        ~Layer() override = default;
     };
 }  // namespace Ignis

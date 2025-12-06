@@ -17,6 +17,8 @@ namespace Ignis {
         std::filesystem::path getPath() const;
         std::string_view      getContent() const;
 
+        size_t getSize() const;
+
        private:
         std::filesystem::path m_Path;
         std::string           m_Content;

@@ -69,7 +69,7 @@ namespace Ignis {
 
             void clear();
 
-            void put_image_barrier(
+            void putImageBarrier(
                 vk::Image               image,
                 vk::ImageLayout         old_layout,
                 vk::ImageLayout         new_layout,
@@ -78,7 +78,7 @@ namespace Ignis {
                 vk::PipelineStageFlags2 dst_stage,
                 vk::AccessFlags2        dst_access);
 
-            void put_buffer_barrier(
+            void putBufferBarrier(
                 vk::Buffer              buffer,
                 uint64_t                offset,
                 uint64_t                size,
@@ -312,12 +312,13 @@ namespace Ignis {
             GraphicsPipelineBuilder &setCullMode(vk::CullModeFlags cull_mode, vk::FrontFace front_face);
             GraphicsPipelineBuilder &setColorAttachmentFormats(const vk::ArrayProxy<vk::Format> &formats);
             GraphicsPipelineBuilder &setDepthAttachmentFormat(vk::Format format);
-            GraphicsPipelineBuilder &setDepthTest(bool depth_write, vk::CompareOp op);
+            GraphicsPipelineBuilder &setDepthTest(vk::Bool32 depth_write, vk::CompareOp op, float min_bounds = 0.0f, float max_bounds = 1.0f);
             GraphicsPipelineBuilder &setBlendingAdditive();
             GraphicsPipelineBuilder &setBlendingAlphaBlended();
             GraphicsPipelineBuilder &setNoMultisampling();
             GraphicsPipelineBuilder &setNoBlending();
             GraphicsPipelineBuilder &setNoDepthTest();
+            GraphicsPipelineBuilder &setNoStencilTest();
 
             vk::Pipeline build(vk::PipelineLayout layout);
 
@@ -348,7 +349,7 @@ namespace Ignis {
 #pragma endregion
 
        public:
-        static void ResizeSwapchain(uint32_t width, uint32_t height);
+        static Vulkan &GetRef();
 
         static vk::Instance GetInstance();
 
@@ -386,7 +387,7 @@ namespace Ignis {
 
         static const vk::Format &GetSwapchainFormatConstRef();
 
-        static vk::ResultValue<uint32_t> AcquireNextImage(vk::Semaphore semaphore);
+        static void ImmediateSubmit(fu2::function<void(vk::CommandBuffer)> fn);
 
         static void WaitDeviceIdle();
 
@@ -636,7 +637,10 @@ namespace Ignis {
             const vk::DebugUtilsMessengerCallbackDataEXT *p_callback_data,
             void                                         *p_userdata);
 
+        static vk::ResultValue<uint32_t> AcquireNextImage(vk::Semaphore semaphore);
+
        private:
+        void resizeSwapchain(uint32_t width, uint32_t height);
         void createSwapchain(uint32_t width, uint32_t height);
         void destroySwapchain();
 
@@ -679,9 +683,17 @@ namespace Ignis {
 
         vma::Allocator m_VmaAllocator;
 
+        vk::CommandPool   m_ImmCommandPool;
+        vk::CommandBuffer m_ImmCommandBuffer;
+        vk::Fence         m_ImmFence;
+
        private:
         static Vulkan *s_pInstance;
 
         IGNIS_IF_DEBUG(static State s_State);
+
+       private:
+        friend class Frame;
+        friend class Engine;
     };
 }  // namespace Ignis

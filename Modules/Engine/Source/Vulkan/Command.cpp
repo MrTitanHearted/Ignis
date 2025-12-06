@@ -6,7 +6,7 @@ namespace Ignis {
         m_BufferBarriers.clear();
     }
 
-    void Vulkan::BarrierMerger::put_image_barrier(
+    void Vulkan::BarrierMerger::putImageBarrier(
         const vk::Image               image,
         const vk::ImageLayout         old_layout,
         const vk::ImageLayout         new_layout,
@@ -33,7 +33,7 @@ namespace Ignis {
         m_ImageBarriers.push_back(image_barrier);
     }
 
-    void Vulkan::BarrierMerger::put_buffer_barrier(
+    void Vulkan::BarrierMerger::putBufferBarrier(
         const vk::Buffer              buffer,
         const uint64_t                offset,
         const uint64_t                size,

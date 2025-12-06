@@ -16,8 +16,16 @@ namespace Ignis {
 
         Engine &engine = Engine::GetRef();
 
-        createViewportImage(engine.getUISystem<ImGuiSystem>(), 1, 1, engine.getFrameGraph());
-        createGraphicsPipeline(engine.getFrameGraph());
+        FrameGraph &frame_graph = engine.getFrameGraph();
+
+        createViewportImage(engine.getUISystem<ImGuiSystem>(), 1, 1, frame_graph);
+
+        m_pBlinnPhong = engine.addRenderModule<BlinnPhong>(BlinnPhong::Settings{
+            m_ViewportImage.Format,
+            m_DepthImage.Format,
+        });
+
+        m_Model = m_pBlinnPhong->loadStaticModel("Assets/Models/vanguard/flair.fbx", frame_graph);
 
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor attached");
     }
@@ -26,7 +34,9 @@ namespace Ignis {
         Vulkan::WaitDeviceIdle();
 
         Engine &engine = Engine::GetRef();
-        destroyGraphicsPipeline(engine.getFrameGraph());
+
+        engine.removeRenderModule<BlinnPhong>();
+
         destroyViewportImage(engine.getUISystem<ImGuiSystem>(), engine.getFrameGraph());
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor detached");
     }
@@ -34,38 +44,44 @@ namespace Ignis {
     void Editor::onUpdate(const double dt) {
         if (m_Play) {
             if (Window::IsKeyDown(KeyCode::eW))
-                m_Camera.processCameraMovement(Camera::Direction::eForward, dt);
-            else if (Window::IsKeyDown(KeyCode::eS))
-                m_Camera.processCameraMovement(Camera::Direction::eBackward, dt);
-            else if (Window::IsKeyDown(KeyCode::eA))
-                m_Camera.processCameraMovement(Camera::Direction::eLeft, dt);
-            else if (Window::IsKeyDown(KeyCode::eD))
-                m_Camera.processCameraMovement(Camera::Direction::eRight, dt);
-            else if (Window::IsKeyDown(KeyCode::eQ))
-                m_Camera.processCameraMovement(Camera::Direction::eWorldDown, dt);
-            else if (Window::IsKeyDown(KeyCode::eE))
-                m_Camera.processCameraMovement(Camera::Direction::eWorldUp, dt);
+                m_Camera.processCameraMovement(Camera::Direction::eForward, static_cast<float>(dt));
+            if (Window::IsKeyDown(KeyCode::eS))
+                m_Camera.processCameraMovement(Camera::Direction::eBackward, static_cast<float>(dt));
+            if (Window::IsKeyDown(KeyCode::eA))
+                m_Camera.processCameraMovement(Camera::Direction::eLeft, static_cast<float>(dt));
+            if (Window::IsKeyDown(KeyCode::eD))
+                m_Camera.processCameraMovement(Camera::Direction::eRight, static_cast<float>(dt));
+            if (Window::IsKeyDown(KeyCode::eQ))
+                m_Camera.processCameraMovement(Camera::Direction::eWorldDown, static_cast<float>(dt));
+            if (Window::IsKeyDown(KeyCode::eE))
+                m_Camera.processCameraMovement(Camera::Direction::eWorldUp, static_cast<float>(dt));
         }
 
-        const float width  = m_ViewportImage.Extent.width;
-        const float height = m_ViewportImage.Extent.height;
-        const float aspect = width / height;
+        const auto width  = static_cast<float>(m_ViewportImage.Extent.width);
+        const auto height = static_cast<float>(m_ViewportImage.Extent.height);
+        const auto aspect = width / height;
 
-        const glm::mat4x4 camera_data[]{
-            m_Camera.getProjection(aspect),
-            m_Camera.getView(),
-        };
-        Vulkan::CopyMemoryToAllocation(camera_data, m_UniformBuffer.Allocation, 0, sizeof(camera_data));
+        m_pBlinnPhong->updateCamera({m_Camera.getProjection(aspect), m_Camera.getView()});
     }
 
-    void Editor::onGUI(AGUISystem *ui_system) {
-        const auto im_gui = static_cast<ImGuiSystem *>(ui_system);
+    void Editor::onGUI(IGUISystem *ui_system) {
+        const auto im_gui = dynamic_cast<ImGuiSystem *>(ui_system);
         ImGui::Begin("Ignis::EditorLayer::Toolbox");
 
         if (ImGui::Button("Play")) {
             m_Play = true;
             ImGui_ImplGlfw_RestoreCallbacks(Window::GetHandle());
         }
+
+        BlinnPhong::StaticModel &model = m_pBlinnPhong->getStaticModelRef(m_Model);
+
+        glm::vec3 euler = glm::degrees(glm::eulerAngles(model.Rotation));
+
+        ImGui::DragFloat3("Position", &model.Position.x, 0.1f);
+        ImGui::DragFloat3("Rotation", &euler.x, 0.1f);
+        ImGui::DragFloat("Scale", &model.Scale, 0.002f, 0.0f, 10.0f);
+
+        model.Rotation = glm::quat(glm::radians(euler));
 
         ImGui::End();
 
@@ -81,7 +97,7 @@ namespace Ignis {
             Vulkan::WaitDeviceIdle();
             auto &frame_graph = Engine::GetRef().getFrameGraph();
             destroyViewportImage(im_gui, frame_graph);
-            createViewportImage(im_gui, viewport_size.x, viewport_size.y, frame_graph);
+            createViewportImage(im_gui, static_cast<uint32_t>(viewport_size.x), static_cast<uint32_t>(viewport_size.y), frame_graph);
         }
 
         ImGui::Image(static_cast<const VkDescriptorSet &>(m_ViewportDescriptor), viewport_size);
@@ -95,8 +111,9 @@ namespace Ignis {
             {0.0f, 1.0f, 0.0f, 1.0f},
         };
 
+        m_pBlinnPhong->onRenderPass(editor_pass);
+
         editor_pass
-            .readBuffers({m_VertexBufferInfo, m_IndexBufferInfo, m_UniformBufferInfo})
             .setColorAttachments({FrameGraph::Attachment{
                 m_ViewportImageID,
                 vk::ClearColorValue{0.0f, 0.0f, 0.0f, 1.0f},
@@ -110,17 +127,10 @@ namespace Ignis {
                 vk::AttachmentStoreOp::eStore,
             })
             .setExecute([this](const vk::CommandBuffer command_buffer) {
-                command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Pipeline);
-                command_buffer.bindDescriptorSets(
-                    vk::PipelineBindPoint::eGraphics,
-                    m_PipelineLayout, 0,
-                    {m_DescriptorSet}, {});
-                command_buffer.bindVertexBuffers(0, {m_VertexBuffer.Handle}, {0});
-                command_buffer.bindIndexBuffer(m_IndexBuffer.Handle, 0, vk::IndexType::eUint32);
-                command_buffer.drawIndexed(m_IndicesCount, 1, 0, 0, 0);
+                m_pBlinnPhong->onDraw(command_buffer);
             });
 
-        frame_graph.addRenderPass(std::move(editor_pass));
+        frame_graph.addRenderPass(editor_pass);
     }
 
     void Editor::createViewportImage(
@@ -153,9 +163,9 @@ namespace Ignis {
 
         m_DepthView = Vulkan::CreateImageDepthView2D(m_DepthImage.Handle, m_DepthImage.Format);
 
-        Render::ImmediateSubmit([this](const vk::CommandBuffer command_buffer) {
+        Vulkan::ImmediateSubmit([this](const vk::CommandBuffer command_buffer) {
             Vulkan::BarrierMerger merger{};
-            merger.put_image_barrier(
+            merger.putImageBarrier(
                 m_ViewportImage.Handle,
                 vk::ImageLayout::eUndefined,
                 vk::ImageLayout::eShaderReadOnlyOptimal,
@@ -163,7 +173,7 @@ namespace Ignis {
                 vk::AccessFlagBits2::eMemoryWrite,
                 vk::PipelineStageFlagBits2::eNone,
                 vk::AccessFlagBits2::eMemoryWrite | vk::AccessFlagBits2::eMemoryRead);
-            merger.put_image_barrier(
+            merger.putImageBarrier(
                 m_DepthImage.Handle,
                 vk::ImageLayout::eUndefined,
                 vk::ImageLayout::eDepthAttachmentOptimal,
@@ -208,161 +218,6 @@ namespace Ignis {
         Vulkan::DestroyImage(m_DepthImage);
 
         m_ViewportView = nullptr;
-    }
-
-    void Editor::createGraphicsPipeline(FrameGraph &frame_graph) {
-        struct Vertex {
-            glm::vec3 Position;
-            glm::vec3 Color;
-        };
-
-        const FileAsset        shader_file   = FileAsset::LoadBinaryFromPath("Assets/Shaders/Triangle.spv").value();
-        const std::string_view shader_source = shader_file.getContent();
-        std::vector<uint32_t>  shader_code{};
-
-        shader_code.resize(shader_source.size() / sizeof(uint32_t));
-        std::memcpy(shader_code.data(), shader_source.data(), shader_source.size());
-
-        m_DescriptorLayout =
-            Vulkan::DescriptorSetLayoutBuilder()
-                .addUniformBuffer(0, vk::ShaderStageFlagBits::eVertex)
-                .build();
-        m_PipelineLayout = Vulkan::CreatePipelineLayout({}, {m_DescriptorLayout});
-
-        m_ShaderModule = Vulkan::CreateShaderModuleFromSPV(shader_code);
-        m_Pipeline =
-            Vulkan::GraphicsPipelineBuilder()
-                .setVertexShader("vs_main", m_ShaderModule)
-                .setFragmentShader("fs_main", m_ShaderModule)
-                .setVertexLayouts({Vulkan::VertexLayout{
-                    vk::VertexInputBindingDescription{0, sizeof(Vertex), vk::VertexInputRate::eVertex},
-                    {
-                        vk::VertexInputAttributeDescription{0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, Position)},
-                        vk::VertexInputAttributeDescription{1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, Color)},
-                    },
-                }})
-                .setInputTopology(vk::PrimitiveTopology::eTriangleList)
-                .setPolygonMode(vk::PolygonMode::eFill)
-                .setCullMode(vk::CullModeFlagBits::eNone, vk::FrontFace::eCounterClockwise)
-                .setColorAttachmentFormats({m_ViewportImage.Format})
-                .setDepthAttachmentFormat(m_DepthImage.Format)
-                .setDepthTest(true, vk::CompareOp::eLess)
-                .setBlendingAdditive()
-                .setBlendingAlphaBlended()
-                .setNoMultisampling()
-                .setNoBlending()
-                .build(m_PipelineLayout);
-
-        constexpr Vertex vertices[]{
-            Vertex{glm::vec3(-1.0f, -1.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f)},
-            Vertex{glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
-            Vertex{glm::vec3(1.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)},
-        };
-
-        constexpr uint32_t indices[]{0, 1, 2};
-
-        m_IndicesCount = sizeof(indices) / sizeof(uint32_t);
-
-        m_VertexBuffer =
-            Vulkan::AllocateBuffer(
-                {}, vma::MemoryUsage::eGpuOnly, {},
-                sizeof(vertices),
-                vk::BufferUsageFlagBits::eVertexBuffer |
-                    vk::BufferUsageFlagBits::eTransferDst);
-        m_IndexBuffer =
-            Vulkan::AllocateBuffer(
-                {}, vma::MemoryUsage::eGpuOnly, {},
-                sizeof(indices),
-                vk::BufferUsageFlagBits::eIndexBuffer |
-                    vk::BufferUsageFlagBits::eTransferDst);
-        m_UniformBuffer =
-            Vulkan::AllocateBuffer(
-                vma::AllocationCreateFlagBits::eMapped,
-                vma::MemoryUsage::eCpuOnly, {},
-                sizeof(glm::mat4x4) * 2,
-                vk::BufferUsageFlagBits::eUniformBuffer);
-
-        {
-            const Vulkan::Buffer staging_buffer =
-                Vulkan::AllocateBuffer(
-                    vma::AllocationCreateFlagBits::eMapped,
-                    vma::MemoryUsage::eCpuOnly, {},
-                    m_VertexBuffer.Size + m_IndexBuffer.Size,
-                    vk::BufferUsageFlagBits::eTransferSrc);
-
-            Vulkan::CopyMemoryToAllocation(vertices, staging_buffer.Allocation, 0, m_VertexBuffer.Size);
-            Vulkan::CopyMemoryToAllocation(indices, staging_buffer.Allocation, m_VertexBuffer.Size, m_IndexBuffer.Size);
-
-            Render::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
-                Vulkan::CopyBufferToBuffer(
-                    staging_buffer.Handle,
-                    m_VertexBuffer.Handle,
-                    0, 0, m_VertexBuffer.Size,
-                    command_buffer);
-                Vulkan::CopyBufferToBuffer(
-                    staging_buffer.Handle,
-                    m_IndexBuffer.Handle,
-                    m_VertexBuffer.Size, 0,
-                    m_IndexBuffer.Size,
-                    command_buffer);
-            });
-
-            Vulkan::DestroyBuffer(staging_buffer);
-        }
-
-        m_VertexBufferInfo = FrameGraph::BufferInfo{
-            frame_graph.importBuffer(m_VertexBuffer.Handle, m_VertexBuffer.UsageFlags, 0, m_VertexBuffer.Size),
-            0,
-            m_VertexBuffer.Size,
-            vk::PipelineStageFlagBits2::eVertexInput,
-        };
-
-        m_IndexBufferInfo = FrameGraph::BufferInfo{
-            frame_graph.importBuffer(m_IndexBuffer.Handle, m_IndexBuffer.UsageFlags, 0, m_IndexBuffer.Size),
-            0,
-            m_IndexBuffer.Size,
-            vk::PipelineStageFlagBits2::eVertexInput,
-        };
-
-        m_UniformBufferInfo = FrameGraph::BufferInfo{
-            frame_graph.importBuffer(m_UniformBuffer.Handle, m_UniformBuffer.UsageFlags, 0, m_UniformBuffer.Size),
-            0,
-            m_UniformBuffer.Size,
-            vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader,
-        };
-
-        m_DescriptorPool = Vulkan::CreateDescriptorPool(
-            {},
-            100,
-            {
-                vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 100},
-            });
-
-        m_DescriptorSet = Vulkan::AllocateDescriptorSet(m_DescriptorLayout, m_DescriptorPool);
-
-        Vulkan::DescriptorSetWriter()
-            .writeUniformBuffer(0, m_UniformBuffer.Handle, 0, m_UniformBuffer.Size)
-            .update(m_DescriptorSet);
-    }
-
-    void Editor::destroyGraphicsPipeline(FrameGraph &frame_graph) {
-        Vulkan::DestroyDescriptorPool(m_DescriptorPool);
-
-        m_DescriptorSet = nullptr;
-
-        frame_graph.removeBuffer(m_VertexBufferInfo.Buffer);
-        frame_graph.removeBuffer(m_IndexBufferInfo.Buffer);
-        frame_graph.removeBuffer(m_UniformBufferInfo.Buffer);
-
-        Vulkan::DestroyBuffer(m_VertexBuffer);
-        Vulkan::DestroyBuffer(m_IndexBuffer);
-        Vulkan::DestroyBuffer(m_UniformBuffer);
-
-        Vulkan::DestroyPipeline(m_Pipeline);
-        Vulkan::DestroyShaderModule(m_ShaderModule);
-
-        Vulkan::DestroyPipelineLayout(m_PipelineLayout);
-        Vulkan::DestroyDescriptorSetLayout(m_DescriptorLayout);
     }
 
     bool Editor::onKeyEvent(const WindowKeyEvent &event) {

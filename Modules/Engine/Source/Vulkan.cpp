@@ -9,13 +9,12 @@ namespace Ignis {
 
     IGNIS_IF_DEBUG(Vulkan::State Vulkan::s_State{});
 
-    void Vulkan::ResizeSwapchain(const uint32_t width, const uint32_t height) {
+    Vulkan &Vulkan::GetRef() {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
-        s_pInstance->createSwapchain(width, height);
+        return *s_pInstance;
     }
 
     vk::Instance Vulkan::GetInstance() {
-        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
         return s_pInstance->m_Instance;
     }
 
@@ -129,12 +128,35 @@ namespace Ignis {
         return s_pInstance->m_SwapchainFormat.format;
     }
 
-    vk::ResultValue<uint32_t> Vulkan::AcquireNextImage(const vk::Semaphore semaphore) {
+    void Vulkan::ImmediateSubmit(fu2::function<void(vk::CommandBuffer)> fn) {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
-        return s_pInstance->m_Device.acquireNextImageKHR(
-            s_pInstance->m_Swapchain,
-            UINT32_MAX,
-            semaphore);
+
+        const vk::Device        &device         = s_pInstance->m_Device;
+        const vk::Fence         &fence          = s_pInstance->m_ImmFence;
+        const vk::CommandBuffer &command_buffer = s_pInstance->m_ImmCommandBuffer;
+        const vk::Queue         &queue          = s_pInstance->m_GraphicsQueue;
+
+        DIGNIS_VK_CHECK(device.resetFences(fence));
+        DIGNIS_VK_CHECK(command_buffer.reset());
+
+        DIGNIS_VK_CHECK(command_buffer.begin(vk::CommandBufferBeginInfo{vk::CommandBufferUsageFlagBits::eOneTimeSubmit}));
+
+        fn(command_buffer);
+
+        DIGNIS_VK_CHECK(command_buffer.end());
+
+        vk::CommandBufferSubmitInfo submit_info{command_buffer};
+
+        DIGNIS_VK_CHECK(queue.submit2(
+            vk::SubmitInfo2{
+                {},
+                {},
+                {submit_info},
+                {},
+            },
+            fence));
+
+        DIGNIS_VK_CHECK(device.waitForFences({fence}, vk::True, UINT32_MAX));
     }
 
     void Vulkan::WaitDeviceIdle() {
@@ -171,7 +193,7 @@ namespace Ignis {
             instance_layers.push_back("VK_LAYER_KHRONOS_validation");
 #endif
 
-        const std::vector<const char *> device_extensions{
+        const std::vector device_extensions{
             VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         };
 
@@ -333,12 +355,59 @@ namespace Ignis {
 
         m_VmaAllocator = vma_allocator;
 
+        {
+            auto [result, command_pool] = m_Device.createCommandPool(vk::CommandPoolCreateInfo{
+                vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+                m_QueueFamilyIndex,
+            });
+            IGNIS_VK_CHECK(result);
+            m_ImmCommandPool = command_pool;
+        }
+        {
+            auto [result, command_buffers] = m_Device.allocateCommandBuffers(vk::CommandBufferAllocateInfo{
+                m_ImmCommandPool,
+                vk::CommandBufferLevel::ePrimary,
+                1,
+            });
+            IGNIS_VK_CHECK(result);
+            DIGNIS_ASSERT(
+                1 == command_buffers.size(),
+                "Ignis::Vulkan: asked for one command buffer, but got {} command buffers.",
+                command_buffers.size());
+            m_ImmCommandBuffer = command_buffers[0];
+        }
+        {
+            auto [result, fence] = m_Device.createFence(vk::FenceCreateInfo{vk::FenceCreateFlagBits::eSignaled});
+            IGNIS_VK_CHECK(result);
+            m_ImmFence = fence;
+        }
+
         s_pInstance = this;
         DIGNIS_LOG_ENGINE_INFO("Ignis::Vulkan Initialized");
+
+        ImmediateSubmit([](const vk::CommandBuffer command_buffer) {
+            BarrierMerger merger{};
+
+            for (const vk::Image &image : s_pInstance->m_SwapchainImages)
+                merger.putImageBarrier(
+                    image,
+                    vk::ImageLayout::eUndefined,
+                    vk::ImageLayout::ePresentSrcKHR,
+                    vk::PipelineStageFlagBits2::eNone,
+                    vk::AccessFlagBits2::eNone,
+                    vk::PipelineStageFlagBits2::eNone,
+                    vk::AccessFlagBits2::eNone);
+
+            merger.flushBarriers(command_buffer);
+        });
     }
 
     void Vulkan::shutdown() {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+
+        m_Device.destroyFence(m_ImmFence);
+        m_Device.destroyCommandPool(m_ImmCommandPool);
+
         destroySwapchain();
 
         m_VmaAllocator.destroy();
@@ -432,6 +501,34 @@ namespace Ignis {
         }
 
         return vk::False;
+    }
+
+    vk::ResultValue<uint32_t> Vulkan::AcquireNextImage(const vk::Semaphore semaphore) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        return s_pInstance->m_Device.acquireNextImageKHR(
+            s_pInstance->m_Swapchain,
+            UINT32_MAX,
+            semaphore);
+    }
+
+    void Vulkan::resizeSwapchain(const uint32_t width, const uint32_t height) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        createSwapchain(width, height);
+        ImmediateSubmit([](const vk::CommandBuffer command_buffer) {
+            BarrierMerger merger{};
+
+            for (const vk::Image &image : s_pInstance->m_SwapchainImages)
+                merger.putImageBarrier(
+                    image,
+                    vk::ImageLayout::eUndefined,
+                    vk::ImageLayout::ePresentSrcKHR,
+                    vk::PipelineStageFlagBits2::eNone,
+                    vk::AccessFlagBits2::eNone,
+                    vk::PipelineStageFlagBits2::eNone,
+                    vk::AccessFlagBits2::eNone);
+
+            merger.flushBarriers(command_buffer);
+        });
     }
 
     void Vulkan::createSwapchain(const uint32_t width, const uint32_t height) {

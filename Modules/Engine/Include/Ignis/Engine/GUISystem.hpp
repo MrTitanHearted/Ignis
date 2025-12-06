@@ -1,14 +1,14 @@
 #pragma once
 
 #include <Ignis/Core.hpp>
-#include <Ignis/Render.hpp>
+#include <Ignis/Frame.hpp>
 
 namespace Ignis {
-    class AGUISystem {
+    class IGUISystem {
        public:
-        explicit AGUISystem(std::type_index type);
+        explicit IGUISystem(std::type_index type);
 
-        virtual ~AGUISystem() {}
+        virtual ~IGUISystem() = default;
 
         virtual void onAttach() {}
 
@@ -23,7 +23,7 @@ namespace Ignis {
        protected:
         template <typename TEvent, typename TGUISystem>
             requires(std::is_base_of_v<IEvent, TEvent> &&
-                     std::is_base_of_v<AGUISystem, TGUISystem>)
+                     std::is_base_of_v<IGUISystem, TGUISystem>)
         void attachCallback(bool (TGUISystem::*method)(const TEvent &)) {
             attachCallback<TEvent>([this, method](const TEvent &event) {
                 return (static_cast<TGUISystem *>(this)->*method)(event);
@@ -32,7 +32,7 @@ namespace Ignis {
 
         template <typename TEvent, typename TGUISystem>
             requires(std::is_base_of_v<IEvent, TEvent> &&
-                     std::is_base_of_v<AGUISystem, TGUISystem>)
+                     std::is_base_of_v<IGUISystem, TGUISystem>)
         void attachCallback(bool (TGUISystem::*method)(const TEvent &) const) const {
             attachCallback<TEvent>([this, method](const TEvent &event) {
                 return (static_cast<const TGUISystem *>(this)->*method)(event);
@@ -59,10 +59,10 @@ namespace Ignis {
     };
 
     template <typename TGUISystem>
-    class IGUISystem : public AGUISystem {
+    class GUISystem : public IGUISystem {
        public:
-        explicit IGUISystem();
+        explicit GUISystem();
 
-        ~IGUISystem() override {}
+        ~GUISystem() override = default;
     };
 }  // namespace Ignis

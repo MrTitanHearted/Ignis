@@ -149,7 +149,10 @@
     #ifdef IGNIS_BUILD_TYPE_DEBUG
         #define DIGNIS_ASSERT(condition, ...) IGNIS_ASSERT(condition, ##__VA_ARGS__)
     #else
-        #define DIGNIS_ASSERT(condition, ...)
+        #define DIGNIS_ASSERT(condition, ...) \
+            do {                              \
+                (void)(condition);            \
+            } while (false);
     #endif
 #endif
 

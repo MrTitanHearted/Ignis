@@ -3,9 +3,10 @@
 #include <Ignis/Engine.hpp>
 
 #include <Ignis/ImGuiSystem.hpp>
+#include <Ignis/BlinnPhong.hpp>
 
 namespace Ignis {
-    class Editor final : public ILayer<Editor> {
+    class Editor final : public Layer<Editor> {
        public:
         struct Settings {
         };
@@ -19,15 +20,12 @@ namespace Ignis {
 
         void onUpdate(double dt) override;
 
-        void onGUI(AGUISystem *ui_system) override;
+        void onGUI(IGUISystem *ui_system) override;
         void onRender(FrameGraph &frame_graph) override;
 
        private:
         void createViewportImage(ImGuiSystem *im_gui, uint32_t width, uint32_t height, FrameGraph &frame_graph);
         void destroyViewportImage(ImGuiSystem *im_gui, FrameGraph &frame_graph);
-
-        void createGraphicsPipeline(FrameGraph &frame_graph);
-        void destroyGraphicsPipeline(FrameGraph &frame_graph);
 
         bool onKeyEvent(const WindowKeyEvent &event);
         bool onMouseMove(const WindowMouseMoveEvent &event);
@@ -49,26 +47,11 @@ namespace Ignis {
         vk::ImageView m_DepthView;
 
         vk::DescriptorSet   m_ViewportDescriptor;
-        FrameGraph::ImageID m_ViewportImageID{};
-        FrameGraph::ImageID m_DepthImageID{};
+        FrameGraph::ImageID m_ViewportImageID{FrameGraph::k_InvalidImageID};
+        FrameGraph::ImageID m_DepthImageID{FrameGraph::k_InvalidImageID};
 
-        vk::DescriptorSetLayout m_DescriptorLayout;
-        vk::PipelineLayout      m_PipelineLayout;
+        BlinnPhong *m_pBlinnPhong;
 
-        vk::ShaderModule m_ShaderModule;
-        vk::Pipeline     m_Pipeline;
-
-        uint32_t m_IndicesCount;
-
-        Vulkan::Buffer m_VertexBuffer;
-        Vulkan::Buffer m_IndexBuffer;
-        Vulkan::Buffer m_UniformBuffer;
-
-        FrameGraph::BufferInfo m_VertexBufferInfo;
-        FrameGraph::BufferInfo m_IndexBufferInfo;
-        FrameGraph::BufferInfo m_UniformBufferInfo;
-
-        vk::DescriptorPool m_DescriptorPool;
-        vk::DescriptorSet  m_DescriptorSet;
+        BlinnPhong::StaticModelHandle m_Model;
     };
 }  // namespace Ignis
