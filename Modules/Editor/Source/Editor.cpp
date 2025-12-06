@@ -14,6 +14,8 @@ namespace Ignis {
         attachCallback<WindowMouseScrollEvent>(&Editor::onMouseScroll);
         attachCallback<WindowMouseButtonEvent>(&Editor::onMouseButtonEvent);
 
+        m_Play = false;
+
         Engine &engine = Engine::GetRef();
 
         FrameGraph &frame_graph = engine.getFrameGraph();
@@ -27,7 +29,7 @@ namespace Ignis {
 
         m_Model = m_pBlinnPhong->loadStaticModel("Assets/Models/vanguard/flair.fbx", frame_graph);
 
-        m_StaticInstances.push_back(m_pBlinnPhong->addStaticInstance(m_Model, {glm::mat4x4{1.0f}}, frame_graph));
+        m_StaticInstances.push_back(m_pBlinnPhong->addStaticInstance(m_Model, {glm::mat4x4{1.0f / 100.0f}}, frame_graph));
 
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor attached");
     }
@@ -82,7 +84,7 @@ namespace Ignis {
 
         ImGui::DragFloat3("Position", glm::value_ptr(add_position));
         ImGui::DragFloat3("Rotation", glm::value_ptr(add_rotation));
-        ImGui::DragFloat("Scale", &add_scale, 0.002f, 0.0f, 10.0f);
+        ImGui::DragFloat("Scale", &add_scale, 0.0005f, 0.0f, 10.0f, "%.4f");
 
         if (ImGui::Button("Add Instance")) {
             const glm::mat4x4 scaled     = glm::scale(glm::mat4x4{1.0f}, glm::vec3{add_scale});
@@ -118,7 +120,7 @@ namespace Ignis {
 
             ImGui::DragFloat3("Position", glm::value_ptr(position), 0.1f);
             ImGui::DragFloat3("Rotation", glm::value_ptr(rotation_deg), 1.0f);
-            ImGui::DragFloat("Scale", &scale.x, 0.002f, 0.0f, 10.0f);
+            ImGui::DragFloat("Scale", &scale.x, 0.0005f, 0.0f, 10.0f, "%.4f");
 
             if (ImGui::Button("Remove Instance")) {
                 to_remove.push_back(m_StaticInstances[i]);
@@ -139,7 +141,12 @@ namespace Ignis {
         while (!to_remove.empty()) {
             Vulkan::WaitDeviceIdle();
             auto instance = to_remove.back();
+            to_remove.pop_back();
             m_pBlinnPhong->removeStaticInstance(m_Model, instance);
+            if (auto it = std::ranges::find(m_StaticInstances, instance);
+                it != std::end(m_StaticInstances)) {
+                m_StaticInstances.erase(it);
+            }
         }
 
         ImGui::End();

@@ -296,7 +296,7 @@ namespace Ignis {
     BlinnPhong::StaticInstance BlinnPhong::getStaticInstance(const StaticModelHandle model, const StaticInstanceHandle handle) {
         DIGNIS_ASSERT(m_StaticModels.contains(model));
         DIGNIS_ASSERT(m_StaticInstanceBuffers.contains(model));
-        DIGNIS_ASSERT(m_StaticModels[model].InstanceCount > handle);
+        DIGNIS_ASSERT(m_StaticInstanceToIndices[model].contains(handle));
 
         const uint32_t index = m_StaticInstanceToIndices[model][handle];
 
@@ -317,7 +317,7 @@ namespace Ignis {
         const StaticInstance      &instance) {
         DIGNIS_ASSERT(m_StaticModels.contains(model));
         DIGNIS_ASSERT(m_StaticInstanceBuffers.contains(model));
-        DIGNIS_ASSERT(m_StaticModels[model].InstanceCount > handle);
+        DIGNIS_ASSERT(m_StaticInstanceToIndices[model].contains(handle));
 
         const uint32_t index = m_StaticInstanceToIndices[model][handle];
 
@@ -410,6 +410,7 @@ namespace Ignis {
         const StaticModelHandle    model,
         const StaticInstanceHandle handle) {
         DIGNIS_ASSERT(m_StaticModels.contains(model));
+        DIGNIS_ASSERT(m_StaticInstanceToIndices[model].contains(handle));
         const uint32_t last_slot = m_StaticModels[model].InstanceCount - 1;
 
         if (const uint32_t slot = m_IndicesToStaticInstance[model][handle];
