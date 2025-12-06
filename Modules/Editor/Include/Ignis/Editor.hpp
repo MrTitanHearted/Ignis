@@ -53,5 +53,7 @@ namespace Ignis {
         BlinnPhong *m_pBlinnPhong;
 
         BlinnPhong::StaticModelHandle m_Model;
+
+        std::vector<BlinnPhong::StaticInstanceHandle> m_StaticInstances;
     };
 }  // namespace Ignis

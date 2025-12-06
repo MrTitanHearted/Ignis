@@ -30,10 +30,11 @@ namespace Ignis {
                 .addSampler(0, m_MaxBindingCount, vk::ShaderStageFlagBits::eFragment)
                 .addSampledImage(1, m_MaxBindingCount, vk::ShaderStageFlagBits::eFragment)
                 .addStorageBuffer(2, vk::ShaderStageFlagBits::eFragment)
-                .addUniformBuffer(3, vk::ShaderStageFlagBits::eVertex)
+                .addStorageBuffer(3, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment)
+                .addUniformBuffer(4, vk::ShaderStageFlagBits::eVertex)
                 .build();
         m_PipelineLayout = Vulkan::CreatePipelineLayout(
-            {vk::PushConstantRange{vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, sizeof(DrawData)}},
+            {vk::PushConstantRange{vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, sizeof(StaticDrawData)}},
             {m_DescriptorLayout});
 
         m_DescriptorPool = Vulkan::CreateDescriptorPool(
@@ -42,6 +43,7 @@ namespace Ignis {
             {
                 vk::DescriptorPoolSize{vk::DescriptorType::eSampler, m_MaxBindingCount},
                 vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, m_MaxBindingCount},
+                vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, m_MaxBindingCount},
                 vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, m_MaxBindingCount},
                 vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, m_MaxBindingCount},
             });
@@ -115,7 +117,7 @@ namespace Ignis {
 
         Vulkan::DescriptorSetWriter()
             .writeStorageBuffer(2, m_MaterialBuffer.Handle, 0, m_MaterialBuffer.Size)
-            .writeUniformBuffer(3, m_CameraBuffer.Handle, 0, m_CameraBuffer.Size)
+            .writeUniformBuffer(4, m_CameraBuffer.Handle, 0, m_CameraBuffer.Size)
             .update(m_DescriptorSet);
     }
 
@@ -156,33 +158,28 @@ namespace Ignis {
             .readImages(m_FrameGraphImages.getData())
             .readBuffers({m_FrameGraphMaterialBuffer, m_FrameGraphCameraBuffer})
             .readBuffers(m_FrameGraphStaticMeshVertexBuffers.getData())
-            .readBuffers(m_FrameGraphStaticMeshIndexBuffers.getData());
+            .readBuffers(m_FrameGraphStaticMeshIndexBuffers.getData())
+            .readBuffers(m_FrameGraphStaticInstanceBuffers.getData());
     }
 
     void BlinnPhong::onDraw(const vk::CommandBuffer command_buffer) {
-        command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_PipelineLayout, 0, {m_DescriptorSet}, {});
-
-        DrawData draw_data{};
+        StaticDrawData draw_data{};
 
         command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_StaticPipeline);
+        command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_PipelineLayout, 0, {m_DescriptorSet}, {});
 
-        for (const auto &[meshes, position, rotation, scale] : m_StaticModels.getConstData()) {
-            const glm::mat4x4 scaled     = glm::scale(glm::mat4x4{1.0f}, glm::vec3{scale});
-            const glm::mat4x4 rotated    = glm::toMat4(rotation);
-            const glm::mat4x4 translated = glm::translate(glm::mat4x4{1.0f}, position);
-
-            draw_data.Model = translated * rotated * scaled;
-
-            for (const auto &mesh_handle : meshes) {
+        for (const auto &[type, model] : m_StaticModels) {
+            draw_data.Instance = type;
+            for (const auto &mesh_handle : model.Meshes) {
                 const auto &mesh   = m_StaticMeshes[mesh_handle];
                 draw_data.Material = mesh.Material;
                 command_buffer.pushConstants(
                     m_PipelineLayout,
                     vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                    0, sizeof(DrawData), &draw_data);
+                    0, sizeof(StaticDrawData), &draw_data);
                 command_buffer.bindVertexBuffers(0, {mesh.VertexBuffer.Handle}, {0});
                 command_buffer.bindIndexBuffer(mesh.IndexBuffer.Handle, 0, vk::IndexType::eUint32);
-                command_buffer.drawIndexed(mesh.IndexCount, 1, 0, 0, 0);
+                command_buffer.drawIndexed(mesh.IndexCount, model.InstanceCount, 0, 0, 0);
             }
         }
     }
@@ -196,7 +193,17 @@ namespace Ignis {
         return m_StaticModels[handle];
     }
 
+    const BlinnPhong::StaticModel &BlinnPhong::getStaticModelConstRef(StaticModelHandle handle) const {
+        DIGNIS_ASSERT(m_StaticModels.contains(handle));
+        return m_StaticModels[handle];
+    }
+
+    const gtl::flat_hash_map<std::string, BlinnPhong::StaticModelHandle> &BlinnPhong::getStaticModelMap() const {
+        return m_LoadedStaticModels;
+    }
+
     BlinnPhong::StaticModelHandle BlinnPhong::loadStaticModel(const std::filesystem::path &path, FrameGraph &frame_graph) {
+        DIGNIS_ASSERT(!m_LoadedStaticModels.contains(std::string{path}));
         StaticModelHandle handle = k_InvalidStaticModelHandle;
 
         if (m_FreeStaticModelHandles.empty()) {
@@ -214,13 +221,45 @@ namespace Ignis {
         const aiNode  *ai_node  = ai_scene->mRootNode;
 
         StaticModel model{};
-        model.Position = glm::vec3{0.0f};
-        model.Rotation = glm::quat{};
-        model.Scale    = 1.0f;
+        model.Path          = path;
+        model.InstanceCount = 0;
 
         processStaticNode(directory, ai_scene, ai_node, model, frame_graph);
 
         m_StaticModels.insert(handle, model);
+
+        m_NextStaticInstanceHandles[handle] = 0;
+        m_FreeStaticInstanceHandles[handle].clear();
+        m_NextStaticInstanceIndices[handle] = 0;
+        m_FreeStaticInstanceIndices[handle].clear();
+
+        m_StaticInstanceToIndices[handle].clear();
+        m_IndicesToStaticInstance[handle].clear();
+
+        m_StaticInstanceBuffers.insert(
+            handle,
+            Vulkan::AllocateBuffer(
+                vma::AllocationCreateFlagBits::eMapped |
+                    vma::AllocationCreateFlagBits::eHostAccessRandom,
+                vma::MemoryUsage::eAutoPreferHost, {},
+                sizeof(StaticInstance) * 2,
+                vk::BufferUsageFlagBits::eStorageBuffer |
+                    vk::BufferUsageFlagBits::eTransferSrc |
+                    vk::BufferUsageFlagBits::eTransferDst));
+
+        const Vulkan::Buffer &instance = m_StaticInstanceBuffers[handle];
+
+        m_FrameGraphStaticInstanceBuffers.insert(
+            handle,
+            FrameGraph::BufferInfo{
+                frame_graph.importBuffer(instance.Handle, instance.UsageFlags, 0, instance.Size),
+                0,
+                instance.Size,
+                vk::PipelineStageFlagBits2::eVertexShader |
+                    vk::PipelineStageFlagBits2::eFragmentShader,
+            });
+
+        m_LoadedStaticModels[model.Path] = handle;
 
         return handle;
     }
@@ -228,13 +267,177 @@ namespace Ignis {
     void BlinnPhong::unloadStaticModel(const StaticModelHandle handle, FrameGraph &frame_graph) {
         DIGNIS_ASSERT(m_StaticModels.contains(handle));
 
-        for (const auto [meshes, _p, _r, _s] = m_StaticModels[handle];
-             const auto &mesh : meshes)
+        const auto &model = m_StaticModels[handle];
+        DIGNIS_ASSERT(m_LoadedStaticModels.contains(model.Path));
+
+        m_LoadedStaticModels.erase(model.Path);
+
+        for (const auto &mesh : model.Meshes)
             removeStaticMesh(mesh, frame_graph);
 
+        frame_graph.removeBuffer(m_FrameGraphStaticInstanceBuffers[handle].Buffer);
+
+        Vulkan::DestroyBuffer(m_StaticInstanceBuffers[handle]);
+
+        m_NextStaticInstanceIndices.erase(handle);
+        m_FreeStaticInstanceIndices.erase(handle);
+        m_StaticInstanceToIndices.erase(handle);
+        m_IndicesToStaticInstance.erase(handle);
+
+        m_NextStaticInstanceHandles.erase(handle);
+        m_FreeStaticInstanceHandles.erase(handle);
+
+        m_StaticInstanceBuffers.remove(handle);
         m_StaticModels.remove(handle);
 
         m_FreeStaticModelHandles.push_back(handle);
+    }
+
+    BlinnPhong::StaticInstance BlinnPhong::getStaticInstance(const StaticModelHandle model, const StaticInstanceHandle handle) {
+        DIGNIS_ASSERT(m_StaticModels.contains(model));
+        DIGNIS_ASSERT(m_StaticInstanceBuffers.contains(model));
+        DIGNIS_ASSERT(m_StaticModels[model].InstanceCount > handle);
+
+        const uint32_t index = m_StaticInstanceToIndices[model][handle];
+
+        StaticInstance instance{};
+
+        Vulkan::CopyAllocationToMemory(
+            m_StaticInstanceBuffers[model].Allocation,
+            sizeof(StaticInstance) * index,
+            &instance,
+            sizeof(StaticInstance));
+
+        return instance;
+    }
+
+    void BlinnPhong::setStaticInstance(
+        const StaticModelHandle    model,
+        const StaticInstanceHandle handle,
+        const StaticInstance      &instance) {
+        DIGNIS_ASSERT(m_StaticModels.contains(model));
+        DIGNIS_ASSERT(m_StaticInstanceBuffers.contains(model));
+        DIGNIS_ASSERT(m_StaticModels[model].InstanceCount > handle);
+
+        const uint32_t index = m_StaticInstanceToIndices[model][handle];
+
+        Vulkan::CopyMemoryToAllocation(
+            &instance,
+            m_StaticInstanceBuffers[model].Allocation,
+            sizeof(StaticInstance) * index,
+            sizeof(StaticInstance));
+    }
+
+    BlinnPhong::StaticInstanceHandle BlinnPhong::addStaticInstance(
+        const StaticModelHandle model,
+        const StaticInstance   &instance,
+        FrameGraph             &frame_graph) {
+        DIGNIS_ASSERT(m_StaticModels.contains(model));
+
+        Vulkan::WaitDeviceIdle();
+
+        StaticInstanceHandle handle = k_InvalidStaticInstanceHandle;
+
+        if (m_FreeStaticInstanceHandles[model].empty()) {
+            handle = m_NextStaticInstanceHandles[model]++;
+        } else {
+            handle = m_FreeStaticInstanceHandles[model].back();
+            m_FreeStaticInstanceHandles[model].pop_back();
+        }
+
+        uint32_t index = k_InvalidStaticInstanceHandle;
+
+        if (m_FreeStaticInstanceIndices[model].empty()) {
+            index = m_NextStaticInstanceIndices[model]++;
+        } else {
+            index = m_FreeStaticInstanceIndices[model].back();
+            m_FreeStaticInstanceIndices[model].pop_back();
+        }
+
+        if (sizeof(StaticInstance) * index >= m_StaticInstanceBuffers[model].Size) {
+            frame_graph.removeBuffer(m_FrameGraphStaticInstanceBuffers[model].Buffer);
+
+            const Vulkan::Buffer old_buffer = m_StaticInstanceBuffers[model];
+
+            m_StaticInstanceBuffers[model] = Vulkan::AllocateBuffer(
+                vma::AllocationCreateFlagBits::eMapped |
+                    vma::AllocationCreateFlagBits::eHostAccessRandom,
+                vma::MemoryUsage::eAutoPreferHost, {},
+                2 * old_buffer.Size,
+                old_buffer.UsageFlags);
+
+            m_FrameGraphStaticInstanceBuffers[model] = FrameGraph::BufferInfo{
+                frame_graph
+                    .importBuffer(
+                        m_StaticInstanceBuffers[model].Handle,
+                        m_StaticInstanceBuffers[model].UsageFlags, 0,
+                        m_StaticInstanceBuffers[model].Size),
+                0,
+                m_FrameGraphStaticInstanceBuffers[model].Size,
+                vk::PipelineStageFlagBits2::eVertexShader,
+            };
+
+            const vma::Allocation &old_allocation = old_buffer.Allocation;
+            Vulkan::InvalidateAllocation(old_allocation, 0, old_buffer.Size);
+            const vma::AllocationInfo old_allocation_info = Vulkan::GetAllocationInfo(old_allocation);
+            Vulkan::CopyMemoryToAllocation(
+                old_allocation_info.pMappedData,
+                m_StaticInstanceBuffers[model].Allocation, 0,
+                old_buffer.Size);
+
+            Vulkan::DestroyBuffer(old_buffer);
+
+            Vulkan::DescriptorSetWriter()
+                .writeStorageBuffer(3, model, m_StaticInstanceBuffers[model].Handle, 0, m_StaticInstanceBuffers[model].Size)
+                .update(m_DescriptorSet);
+        }
+
+        Vulkan::CopyMemoryToAllocation(
+            &instance,
+            m_StaticInstanceBuffers[model].Allocation,
+            sizeof(StaticInstance) * index,
+            sizeof(StaticInstance));
+
+        m_StaticInstanceToIndices[model][handle] = index;
+        m_IndicesToStaticInstance[model][index]  = handle;
+
+        m_StaticModels[model].InstanceCount++;
+
+        return handle;
+    }
+
+    void BlinnPhong::removeStaticInstance(
+        const StaticModelHandle    model,
+        const StaticInstanceHandle handle) {
+        DIGNIS_ASSERT(m_StaticModels.contains(model));
+        const uint32_t last_slot = m_StaticModels[model].InstanceCount - 1;
+
+        if (const uint32_t slot = m_IndicesToStaticInstance[model][handle];
+            slot != last_slot) {
+            StaticInstance last_instance{};
+            Vulkan::CopyAllocationToMemory(
+                m_StaticInstanceBuffers[model].Allocation,
+                sizeof(StaticInstance) * last_slot,
+                &last_instance,
+                sizeof(StaticInstance));
+            Vulkan::CopyMemoryToAllocation(
+                &last_instance,
+                m_StaticInstanceBuffers[model].Allocation,
+                sizeof(StaticInstance) * handle,
+                sizeof(StaticInstance));
+
+            m_StaticInstanceToIndices[model][m_IndicesToStaticInstance[model][last_slot]] = slot;
+
+            m_IndicesToStaticInstance[model][m_StaticInstanceToIndices[model][slot]] = m_StaticInstanceToIndices[model][slot];
+        }
+
+        m_IndicesToStaticInstance[model].erase(last_slot);
+        m_StaticInstanceToIndices[model].erase(handle);
+
+        m_FreeStaticInstanceIndices[model].push_back(last_slot);
+        m_FreeStaticInstanceHandles[model].push_back(handle);
+
+        m_StaticModels[model].InstanceCount--;
     }
 
     void BlinnPhong::processStaticNode(

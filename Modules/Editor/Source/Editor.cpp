@@ -27,6 +27,8 @@ namespace Ignis {
 
         m_Model = m_pBlinnPhong->loadStaticModel("Assets/Models/vanguard/flair.fbx", frame_graph);
 
+        m_StaticInstances.push_back(m_pBlinnPhong->addStaticInstance(m_Model, {glm::mat4x4{1.0f}}, frame_graph));
+
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor attached");
     }
 
@@ -73,15 +75,72 @@ namespace Ignis {
             ImGui_ImplGlfw_RestoreCallbacks(Window::GetHandle());
         }
 
-        BlinnPhong::StaticModel &model = m_pBlinnPhong->getStaticModelRef(m_Model);
+        ImGui::SeparatorText("Adding Instances");
+        static glm::vec3 add_position = glm::vec3{0.0f};
+        static glm::vec3 add_rotation = glm::vec3{0.0f};
+        static float     add_scale    = 1.0f;
 
-        glm::vec3 euler = glm::degrees(glm::eulerAngles(model.Rotation));
+        ImGui::DragFloat3("Position", glm::value_ptr(add_position));
+        ImGui::DragFloat3("Rotation", glm::value_ptr(add_rotation));
+        ImGui::DragFloat("Scale", &add_scale, 0.002f, 0.0f, 10.0f);
 
-        ImGui::DragFloat3("Position", &model.Position.x, 0.1f);
-        ImGui::DragFloat3("Rotation", &euler.x, 0.1f);
-        ImGui::DragFloat("Scale", &model.Scale, 0.002f, 0.0f, 10.0f);
+        if (ImGui::Button("Add Instance")) {
+            const glm::mat4x4 scaled     = glm::scale(glm::mat4x4{1.0f}, glm::vec3{add_scale});
+            const glm::mat4x4 rotated    = glm::toMat4(glm::quat(glm::radians(add_rotation)));  // Fixed: radians, not normalize
+            const glm::mat4x4 translated = glm::translate(glm::mat4x4{1.0f}, add_position);
 
-        model.Rotation = glm::quat(glm::radians(euler));
+            const glm::mat4x4 final = translated * rotated * scaled;
+
+            m_StaticInstances.push_back(m_pBlinnPhong->addStaticInstance(m_Model, {final}, Engine::GetRef().getFrameGraph()));
+        }
+
+        ImGui::SeparatorText("Existing Instances");
+
+        static std::vector<BlinnPhong::StaticInstanceHandle> to_remove{};
+        to_remove.clear();
+
+        for (uint32_t i = 0; i < m_StaticInstances.size(); i++) {
+            ImGui::PushID(i);  // Unique ID for each instance's widgets
+
+            BlinnPhong::StaticInstance instance = m_pBlinnPhong->getStaticInstance(m_Model, m_StaticInstances[i]);
+
+            glm::vec3 position{};
+            glm::quat orientation{};
+            glm::vec3 scale{};
+            glm::vec3 skew{};
+            glm::vec4 perspective{};
+
+            glm::decompose(instance.Transform, scale, orientation, position, skew, perspective);
+
+            glm::vec3 rotation_deg = glm::degrees(glm::eulerAngles(orientation));
+
+            ImGui::Text("Instance %u", i);
+
+            ImGui::DragFloat3("Position", glm::value_ptr(position), 0.1f);
+            ImGui::DragFloat3("Rotation", glm::value_ptr(rotation_deg), 1.0f);
+            ImGui::DragFloat("Scale", &scale.x, 0.002f, 0.0f, 10.0f);
+
+            if (ImGui::Button("Remove Instance")) {
+                to_remove.push_back(m_StaticInstances[i]);
+            }
+
+            glm::mat4x4 scaled     = glm::scale(glm::mat4x4{1.0f}, glm::vec3{scale.x});
+            glm::mat4x4 rotated    = glm::toMat4(glm::quat(glm::radians(rotation_deg)));
+            glm::mat4x4 translated = glm::translate(glm::mat4x4{1.0f}, position);
+
+            instance.Transform = translated * rotated * scaled;
+
+            m_pBlinnPhong->setStaticInstance(m_Model, m_StaticInstances[i], instance);
+
+            ImGui::Separator();
+            ImGui::PopID();
+        }
+
+        while (!to_remove.empty()) {
+            Vulkan::WaitDeviceIdle();
+            auto instance = to_remove.back();
+            m_pBlinnPhong->removeStaticInstance(m_Model, instance);
+        }
 
         ImGui::End();
 
@@ -224,11 +283,12 @@ namespace Ignis {
         if (KeyAction::ePress != event.Action)
             return false;
 
-        if (KeyCode::eF == event.Key)
+        if (KeyCode::eF == event.Key) {
             if (Window::IsFullscreen())
                 Window::MakeWindowed();
             else
                 Window::MakeFullscreen();
+        }
 
         if (!m_Play)
             return false;

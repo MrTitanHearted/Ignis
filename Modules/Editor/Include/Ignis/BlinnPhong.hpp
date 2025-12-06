@@ -9,13 +9,15 @@ namespace Ignis {
 
         typedef uint32_t StaticMeshHandle;
         typedef uint32_t StaticModelHandle;
+        typedef uint32_t StaticInstanceHandle;
 
         static constexpr SamplerHandle  k_InvalidSamplerHandle  = ~0u;
         static constexpr TextureHandle  k_InvalidTextureHandle  = ~0u;
         static constexpr MaterialHandle k_InvalidMaterialHandle = ~0u;
 
-        static constexpr StaticMeshHandle  k_InvalidStaticMeshHandle  = ~0u;
-        static constexpr StaticModelHandle k_InvalidStaticModelHandle = ~0u;
+        static constexpr StaticMeshHandle     k_InvalidStaticMeshHandle     = ~0u;
+        static constexpr StaticModelHandle    k_InvalidStaticModelHandle    = ~0u;
+        static constexpr StaticInstanceHandle k_InvalidStaticInstanceHandle = ~0u;
 
         struct SampledTexture {
             TextureHandle Texture{k_InvalidTextureHandle};
@@ -29,17 +31,18 @@ namespace Ignis {
             float Shininess;
         };
 
-        struct Camera {
-            glm::mat4x4 Projection;
-            glm::mat4x4 View;
+        struct StaticInstance {
+            glm::mat4x4 Transform{1.0f};
         };
 
-        struct DrawData {
-            MaterialHandle Material;
+        struct Camera {
+            glm::mat4x4 Projection{1.0f};
+            glm::mat4x4 View{1.0f};
+        };
 
-            uint32_t _ignis_padding[3];
-
-            glm::mat4x4 Model;
+        struct StaticDrawData {
+            MaterialHandle       Material;
+            StaticInstanceHandle Instance;
         };
 
         struct StaticMesh {
@@ -53,11 +56,11 @@ namespace Ignis {
         };
 
         struct StaticModel {
+            std::string Path;
+
             std::vector<StaticMeshHandle> Meshes;
 
-            glm::vec3 Position;
-            glm::quat Rotation;
-            float     Scale;
+            uint32_t InstanceCount;
         };
 
         struct StaticVertex {
@@ -89,9 +92,21 @@ namespace Ignis {
 
         StaticModel &getStaticModelRef(StaticModelHandle handle);
 
+        const StaticModel &getStaticModelConstRef(StaticModelHandle handle) const;
+
+        const gtl::flat_hash_map<std::string, StaticModelHandle> &getStaticModelMap() const;
+
         StaticModelHandle loadStaticModel(const std::filesystem::path &path, FrameGraph &frame_graph);
 
         void unloadStaticModel(StaticModelHandle handle, FrameGraph &frame_graph);
+
+        StaticInstance getStaticInstance(StaticModelHandle model, StaticInstanceHandle handle);
+
+        void setStaticInstance(StaticModelHandle model, StaticInstanceHandle handle, const StaticInstance &instance);
+
+        StaticInstanceHandle addStaticInstance(StaticModelHandle model, const StaticInstance &instance, FrameGraph &frame_graph);
+
+        void removeStaticInstance(StaticModelHandle model, StaticInstanceHandle handle);
 
        private:
         void processStaticNode(
@@ -149,12 +164,20 @@ namespace Ignis {
         StaticMeshHandle  m_NextStaticMeshHandle;
         StaticModelHandle m_NextStaticModelHandle;
 
+        gtl::flat_hash_map<StaticModelHandle, StaticInstanceHandle> m_NextStaticInstanceHandles;
+
+        gtl::flat_hash_map<StaticModelHandle, uint32_t> m_NextStaticInstanceIndices;
+
         std::vector<SamplerHandle>  m_FreeSamplerHandles;
         std::vector<TextureHandle>  m_FreeTexturesHandles;
         std::vector<MaterialHandle> m_FreeMaterialHandles;
 
         std::vector<StaticMeshHandle>  m_FreeStaticMeshHandles;
         std::vector<StaticModelHandle> m_FreeStaticModelHandles;
+
+        gtl::flat_hash_map<StaticModelHandle, std::vector<StaticInstanceHandle>> m_FreeStaticInstanceHandles;
+
+        gtl::flat_hash_map<StaticModelHandle, std::vector<uint32_t>> m_FreeStaticInstanceIndices;
 
         gtl::flat_hash_map<SamplerHandle, vk::Sampler>   m_Samplers;
         gtl::flat_hash_map<TextureHandle, Vulkan::Image> m_Textures;
@@ -166,16 +189,21 @@ namespace Ignis {
         Vulkan::Buffer m_MaterialBuffer;
         Vulkan::Buffer m_CameraBuffer;
 
-        SparseVector<StaticMeshHandle, StaticMesh>   m_StaticMeshes;
-        SparseVector<StaticModelHandle, StaticModel> m_StaticModels;
+        SparseVector<StaticMeshHandle, StaticMesh>      m_StaticMeshes;
+        SparseVector<StaticModelHandle, StaticModel>    m_StaticModels;
+        SparseVector<StaticModelHandle, Vulkan::Buffer> m_StaticInstanceBuffers;
+
+        gtl::flat_hash_map<StaticModelHandle, gtl::flat_hash_map<StaticInstanceHandle, uint32_t>> m_StaticInstanceToIndices;
+        gtl::flat_hash_map<StaticModelHandle, gtl::flat_hash_map<uint32_t, StaticInstanceHandle>> m_IndicesToStaticInstance;
 
         SparseVector<TextureHandle, FrameGraph::ImageID> m_FrameGraphImages;
 
         FrameGraph::BufferInfo m_FrameGraphMaterialBuffer;
         FrameGraph::BufferInfo m_FrameGraphCameraBuffer;
 
-        SparseVector<StaticMeshHandle, FrameGraph::BufferInfo> m_FrameGraphStaticMeshVertexBuffers;
-        SparseVector<StaticMeshHandle, FrameGraph::BufferInfo> m_FrameGraphStaticMeshIndexBuffers;
+        SparseVector<StaticMeshHandle, FrameGraph::BufferInfo>  m_FrameGraphStaticMeshVertexBuffers;
+        SparseVector<StaticMeshHandle, FrameGraph::BufferInfo>  m_FrameGraphStaticMeshIndexBuffers;
+        SparseVector<StaticModelHandle, FrameGraph::BufferInfo> m_FrameGraphStaticInstanceBuffers;
 
         gtl::flat_hash_map<std::string, TextureHandle>  m_LoadedTextures;
         gtl::flat_hash_map<std::string, MaterialHandle> m_LoadedMaterials;
@@ -186,6 +214,8 @@ namespace Ignis {
         gtl::flat_hash_map<SamplerHandle, uint32_t>  m_LoadedSamplerRCs;
         gtl::flat_hash_map<TextureHandle, uint32_t>  m_LoadedTextureRCs;
         gtl::flat_hash_map<MaterialHandle, uint32_t> m_LoadedMaterialRCs;
+
+        gtl::flat_hash_map<std::string, StaticModelHandle> m_LoadedStaticModels;
 
         vk::Sampler m_NullSampler;
 

@@ -34,6 +34,10 @@ struct Material {
     float Shininess;
 };
 
+struct Instance {
+    column_major float4x4 Transform;
+};
+
 struct Camera {
     float4x4 Projection;
     float4x4 View;
@@ -46,25 +50,27 @@ Texture2D gTextures[];
 [[vk::binding(2, 0)]]
 StructuredBuffer<Material> gMaterials;
 [[vk::binding(3, 0)]]
+StructuredBuffer<Instance> gInstances[];
+[[vk::binding(4, 0)]]
 ConstantBuffer<Camera> gCamera;
 
 struct DrawData {
     uint MaterialID;
-
-    uint _ignis_padding[3];
-
-    float4x4 Model;
+    uint InstanceID;
 };
 
 [[vk::push_constant]]
 DrawData gDrawData;
 
 [shader("vertex")]
-VertexOutput vs_main(Vertex input) {
+VertexOutput vs_main(Vertex input, uint instance_index: SV_InstanceID) {
+    Instance instance = gInstances[gDrawData.InstanceID].Load(instance_index);
+    column_major float4x4 model = instance.Transform;
+
     VertexOutput output;
 
-    output.Position = mul(gCamera.Projection, mul(gCamera.View, mul(gDrawData.Model, float4(input.Position, 1.0f))));
-    output.Normal   = mul(float3x3(gDrawData.Model), input.Normal);
+    output.Position = mul(gCamera.Projection, mul(gCamera.View, mul(model, float4(input.Position, 1.0f))));
+    output.Normal   = mul(float3x3(model), input.Normal);
     output.UV       = input.UV;
 
     output.MaterialID = gDrawData.MaterialID;
@@ -76,7 +82,7 @@ VertexOutput vs_main(Vertex input) {
 float4 fs_main(FragmentInput input) : SV_Target {
     Material material = gMaterials[input.MaterialID];
 
-    Texture2D diffuse_texture = gTextures[material.DiffuseTexture.TextureID];
+    Texture2D    diffuse_texture = gTextures[material.DiffuseTexture.TextureID];
     SamplerState diffuse_sampler = gSamplers[material.DiffuseTexture.SamplerID];
 
     return diffuse_texture.Sample(diffuse_sampler, input.UV);

@@ -174,6 +174,21 @@ namespace Ignis {
         DIGNIS_VK_CHECK(s_pInstance->m_VmaAllocator.copyAllocationToMemory(src, src_offset, dst, size));
     }
 
+    void Vulkan::InvalidateAllocation(const vma::Allocation &allocation, const uint64_t offset, const uint64_t size) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        DIGNIS_VK_CHECK(s_pInstance->m_VmaAllocator.invalidateAllocation(allocation, offset, size));
+    }
+
+    void Vulkan::FlushAllocation(const vma::Allocation &allocation, const uint64_t offset, const uint64_t size) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        DIGNIS_VK_CHECK(s_pInstance->m_VmaAllocator.flushAllocation(allocation, offset, size));
+    }
+
+    vma::AllocationInfo Vulkan::GetAllocationInfo(const vma::Allocation &allocation) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        return s_pInstance->m_VmaAllocator.getAllocationInfo(allocation);
+    }
+
     void Vulkan::initialize(const Settings &settings) {
         DIGNIS_ASSERT(nullptr == s_pInstance, "Ignis::Vulkan is already initialized.");
 

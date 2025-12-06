@@ -394,6 +394,11 @@ namespace Ignis {
         static void CopyMemoryToAllocation(const void *src, vma::Allocation dst, uint64_t dst_offset, uint64_t size);
         static void CopyAllocationToMemory(vma::Allocation src, uint64_t src_offset, void *dst, uint64_t size);
 
+        static void InvalidateAllocation(const vma::Allocation &allocation, uint64_t offset, uint64_t size);
+        static void FlushAllocation(const vma::Allocation &allocation, uint64_t offset, uint64_t size);
+
+        static vma::AllocationInfo GetAllocationInfo(const vma::Allocation &allocation);
+
 #pragma region Buffer
         static void DestroyBuffer(const Buffer &buffer);
 
