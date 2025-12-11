@@ -26,6 +26,16 @@ namespace Ignis {
             bool  IsInitialized{false};
         };
 
+        struct LightPanelState {
+            BPR::DirectionalLight DirectionalLight;
+
+            std::vector<BPR::PointLightID> PointLights;
+            std::vector<BPR::SpotLightID>  SpotLights;
+
+            gtl::flat_hash_map<BPR::PointLightID, BPR::PointLight> PointLightValues;
+            gtl::flat_hash_map<BPR::SpotLightID, BPR::SpotLight>   SpotLightValues;
+        };
+
         struct StaticModelPanelState {
             std::vector<BPR::StaticModelID> StaticModels;
 
@@ -44,6 +54,7 @@ namespace Ignis {
             const glm::vec3 &rotation,
             float            scale);
 
+        static void RenderLightPanel(LightPanelState &state, BPR *bpr);
         static void RenderStaticModelPanel(StaticModelPanelState &state, BPR *bpr);
 
        public:
@@ -83,6 +94,8 @@ namespace Ignis {
         FrameGraph::ImageID m_DepthImageID{FrameGraph::k_InvalidImageID};
 
         std::unique_ptr<BPR> m_pBPR;
+
+        LightPanelState m_LightPanelState;
 
         StaticModelPanelState m_StaticModelPanelState;
     };

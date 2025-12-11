@@ -8,13 +8,25 @@ namespace Ignis {
           m_MaxBindingCount{settings.MaxBindingCount},
           m_NextTextureID{0u},
           m_NextMaterialID{0u},
+          m_NextPointLightID{0},
+          m_NextSpotLightID{0},
           m_NextStaticModelID{0u},
           m_NextStaticInstanceID{0u},
           m_MaterialStagingBuffer{},
           m_MaterialBuffer{},
           m_CameraBuffer{},
+          m_PointLightStagingBuffer{},
+          m_SpotLightStagingBuffer{},
+          m_DirectionalLightBuffer{},
+          m_PointLightBuffer{},
+          m_SpotLightBuffer{},
+          m_LightDataBuffer{},
           m_FrameGraphMaterialBuffer{},
-          m_FrameGraphCameraBuffer{} {
+          m_FrameGraphCameraBuffer{},
+          m_FrameGraphDirectionalLightBuffer{},
+          m_FrameGraphPointLightBuffer{},
+          m_FrameGraphSpotLightBuffer{},
+          m_FrameGraphLightDataBuffer{} {
         const FileAsset static_shader_file = FileAsset::LoadBinaryFromPath("Assets/Shaders/Ignis/BPR/Static.spv").value();
 
         std::vector<uint32_t> static_shader_code{};
@@ -27,26 +39,48 @@ namespace Ignis {
             10,
             {
                 vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, m_MaxBindingCount},
+                vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, m_MaxBindingCount},
+                vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, m_MaxBindingCount},
+                vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, m_MaxBindingCount},
                 vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, m_MaxBindingCount},
                 vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, m_MaxBindingCount},
                 vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, m_MaxBindingCount},
+                vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, m_MaxBindingCount},
+                vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, m_MaxBindingCount},
+                vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, m_MaxBindingCount},
             });
 
-        m_StaticDescriptorLayout =
+        m_MaterialDescriptorLayout =
             Vulkan::DescriptorSetLayoutBuilder()
                 .addCombinedImageSampler(0, m_MaxBindingCount, vk::ShaderStageFlagBits::eFragment)
                 .addStorageBuffer(1, m_MaxBindingCount, vk::ShaderStageFlagBits::eFragment)
-                .addStorageBuffer(2, m_MaxBindingCount, vk::ShaderStageFlagBits::eVertex)
-                .addUniformBuffer(3, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment)
+                .addUniformBuffer(2, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment)
+                .build();
+
+        m_MaterialDescriptor = Vulkan::AllocateDescriptorSet(m_MaterialDescriptorLayout, m_DescriptorPool);
+
+        m_LightDescriptorLayout =
+            Vulkan::DescriptorSetLayoutBuilder()
+                .addUniformBuffer(0, vk::ShaderStageFlagBits::eFragment)
+                .addStorageBuffer(1, vk::ShaderStageFlagBits::eFragment)
+                .addStorageBuffer(2, vk::ShaderStageFlagBits::eFragment)
+                .addUniformBuffer(3, vk::ShaderStageFlagBits::eFragment)
+                .build();
+
+        m_LightDescriptor = Vulkan::AllocateDescriptorSet(m_LightDescriptorLayout, m_DescriptorPool);
+
+        m_StaticDescriptorLayout =
+            Vulkan::DescriptorSetLayoutBuilder()
+                .addStorageBuffer(0, m_MaxBindingCount, vk::ShaderStageFlagBits::eVertex)
                 .build();
 
         m_StaticPipelineLayout = Vulkan::CreatePipelineLayout(
             vk::PushConstantRange{
                 vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                 0, sizeof(StaticDrawData)},
-            m_StaticDescriptorLayout);
+            {m_MaterialDescriptorLayout, m_LightDescriptorLayout, m_StaticDescriptorLayout});
 
-        m_StaticDescriptorSet = Vulkan::AllocateDescriptorSet(m_StaticDescriptorLayout, m_DescriptorPool);
+        m_StaticDescriptor = Vulkan::AllocateDescriptorSet(m_StaticDescriptorLayout, m_DescriptorPool);
 
         const vk::ShaderModule static_shader_module = Vulkan::CreateShaderModuleFromSPV(static_shader_code);
 
@@ -98,6 +132,46 @@ namespace Ignis {
             sizeof(Camera),
             vk::BufferUsageFlagBits::eUniformBuffer);
 
+        m_PointLightStagingBuffer = Vulkan::AllocateBuffer(
+            vma::AllocationCreateFlagBits::eMapped,
+            vma::MemoryUsage::eCpuOnly, {},
+            sizeof(PointLight),
+            vk::BufferUsageFlagBits::eTransferSrc |
+                vk::BufferUsageFlagBits::eTransferDst);
+
+        m_SpotLightStagingBuffer = Vulkan::AllocateBuffer(
+            vma::AllocationCreateFlagBits::eMapped,
+            vma::MemoryUsage::eCpuOnly, {},
+            sizeof(SpotLight),
+            vk::BufferUsageFlagBits::eTransferSrc |
+                vk::BufferUsageFlagBits::eTransferDst);
+
+        m_DirectionalLightBuffer = Vulkan::AllocateBuffer(
+            vma::AllocationCreateFlagBits::eMapped,
+            vma::MemoryUsage::eCpuOnly, {},
+            sizeof(DirectionalLight),
+            vk::BufferUsageFlagBits::eUniformBuffer);
+
+        m_PointLightBuffer = Vulkan::AllocateBuffer(
+            {}, vma::MemoryUsage::eGpuOnly, {},
+            sizeof(PointLight) * 2,
+            vk::BufferUsageFlagBits::eStorageBuffer |
+                vk::BufferUsageFlagBits::eTransferSrc |
+                vk::BufferUsageFlagBits::eTransferDst);
+
+        m_SpotLightBuffer = Vulkan::AllocateBuffer(
+            {}, vma::MemoryUsage::eGpuOnly, {},
+            sizeof(SpotLight) * 2,
+            vk::BufferUsageFlagBits::eStorageBuffer |
+                vk::BufferUsageFlagBits::eTransferSrc |
+                vk::BufferUsageFlagBits::eTransferDst);
+
+        m_LightDataBuffer = Vulkan::AllocateBuffer(
+            vma::AllocationCreateFlagBits::eMapped,
+            vma::MemoryUsage::eCpuOnly, {},
+            sizeof(LightData),
+            vk::BufferUsageFlagBits::eUniformBuffer);
+
         m_FrameGraphMaterialBuffer = FrameGraph::BufferInfo{
             m_FrameGraph.importBuffer(m_MaterialBuffer.Handle, m_MaterialBuffer.Usage, 0, m_MaterialBuffer.Size),
             0u,
@@ -112,15 +186,66 @@ namespace Ignis {
             vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader,
         };
 
+        m_FrameGraphDirectionalLightBuffer = FrameGraph::BufferInfo{
+            m_FrameGraph.importBuffer(
+                m_DirectionalLightBuffer.Handle,
+                m_DirectionalLightBuffer.Usage, 0,
+                m_DirectionalLightBuffer.Size),
+            0,
+            m_DirectionalLightBuffer.Size,
+            vk::PipelineStageFlagBits2::eFragmentShader,
+        };
+
+        m_FrameGraphPointLightBuffer = FrameGraph::BufferInfo{
+            m_FrameGraph.importBuffer(
+                m_PointLightBuffer.Handle,
+                m_PointLightBuffer.Usage, 0,
+                m_PointLightBuffer.Size),
+            0,
+            m_PointLightBuffer.Size,
+            vk::PipelineStageFlagBits2::eFragmentShader,
+        };
+
+        m_FrameGraphSpotLightBuffer = FrameGraph::BufferInfo{
+            m_FrameGraph.importBuffer(
+                m_SpotLightBuffer.Handle,
+                m_SpotLightBuffer.Usage, 0,
+                m_SpotLightBuffer.Size),
+            0,
+            m_SpotLightBuffer.Size,
+            vk::PipelineStageFlagBits2::eFragmentShader,
+        };
+
+        m_FrameGraphLightDataBuffer = FrameGraph::BufferInfo{
+            m_FrameGraph.importBuffer(
+                m_LightDataBuffer.Handle,
+                m_LightDataBuffer.Usage, 0,
+                m_LightDataBuffer.Size),
+            0,
+            m_LightDataBuffer.Size,
+            vk::PipelineStageFlagBits2::eFragmentShader,
+        };
+
         Vulkan::DescriptorSetWriter()
             .writeStorageBuffer(1, m_MaterialBuffer.Handle, 0, m_MaterialBuffer.Size)
-            .writeUniformBuffer(3, m_CameraBuffer.Handle, 0, m_CameraBuffer.Size)
-            .update(m_StaticDescriptorSet);
+            .writeUniformBuffer(2, m_CameraBuffer.Handle, 0, m_CameraBuffer.Size)
+            .update(m_MaterialDescriptor);
+
+        Vulkan::DescriptorSetWriter()
+            .writeUniformBuffer(0, m_DirectionalLightBuffer.Handle, 0, m_DirectionalLightBuffer.Size)
+            .writeStorageBuffer(1, m_PointLightBuffer.Handle, 0, m_PointLightBuffer.Size)
+            .writeStorageBuffer(2, m_SpotLightBuffer.Handle, 0, m_SpotLightBuffer.Size)
+            .writeUniformBuffer(3, m_LightDataBuffer.Handle, 0, m_LightDataBuffer.Size)
+            .update(m_LightDescriptor);
     }
 
     BPR::~BPR() {
         m_FrameGraph.removeBuffer(m_FrameGraphMaterialBuffer.Buffer);
         m_FrameGraph.removeBuffer(m_FrameGraphCameraBuffer.Buffer);
+        m_FrameGraph.removeBuffer(m_FrameGraphDirectionalLightBuffer.Buffer);
+        m_FrameGraph.removeBuffer(m_FrameGraphPointLightBuffer.Buffer);
+        m_FrameGraph.removeBuffer(m_FrameGraphSpotLightBuffer.Buffer);
+        m_FrameGraph.removeBuffer(m_FrameGraphLightDataBuffer.Buffer);
 
         for (const auto  loaded_static_models = m_LoadedStaticModels;
              const auto &model : std::views::values(loaded_static_models))
@@ -131,23 +256,39 @@ namespace Ignis {
 
         DIGNIS_ASSERT(m_LoadedStaticModels.empty());
 
+        Vulkan::DestroyDescriptorPool(m_DescriptorPool);
+
         Vulkan::DestroySampler(m_Sampler);
 
         Vulkan::DestroyBuffer(m_MaterialStagingBuffer);
         Vulkan::DestroyBuffer(m_MaterialBuffer);
         Vulkan::DestroyBuffer(m_CameraBuffer);
 
+        Vulkan::DestroyBuffer(m_PointLightStagingBuffer);
+        Vulkan::DestroyBuffer(m_SpotLightStagingBuffer);
+        Vulkan::DestroyBuffer(m_DirectionalLightBuffer);
+        Vulkan::DestroyBuffer(m_PointLightBuffer);
+        Vulkan::DestroyBuffer(m_SpotLightBuffer);
+        Vulkan::DestroyBuffer(m_LightDataBuffer);
+
         Vulkan::DestroyPipeline(m_StaticPipeline);
         Vulkan::DestroyPipelineLayout(m_StaticPipelineLayout);
         Vulkan::DestroyDescriptorSetLayout(m_StaticDescriptorLayout);
-
-        Vulkan::DestroyDescriptorPool(m_DescriptorPool);
+        Vulkan::DestroyDescriptorSetLayout(m_LightDescriptorLayout);
+        Vulkan::DestroyDescriptorSetLayout(m_MaterialDescriptorLayout);
     }
 
     void BPR::onRenderPass(FrameGraph::RenderPass &render_pass) {
         render_pass
             .readImages(m_FrameGraphImages.getData())
-            .readBuffers({m_FrameGraphMaterialBuffer, m_FrameGraphCameraBuffer})
+            .readBuffers({
+                m_FrameGraphMaterialBuffer,
+                m_FrameGraphCameraBuffer,
+                m_FrameGraphDirectionalLightBuffer,
+                m_FrameGraphPointLightBuffer,
+                m_FrameGraphSpotLightBuffer,
+                m_FrameGraphLightDataBuffer,
+            })
             .readBuffers(m_FrameGraphStaticModelIndexBuffers.getData())
             .readBuffers(m_FrameGraphStaticModelVertexBuffers.getData())
             .readBuffers(m_FrameGraphStaticModelInstanceBuffers.getData());
@@ -160,7 +301,7 @@ namespace Ignis {
         command_buffer.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
             m_StaticPipelineLayout, 0,
-            {m_StaticDescriptorSet}, {});
+            {m_MaterialDescriptor, m_LightDescriptor, m_StaticDescriptor}, {});
 
         for (const auto &[model_id, model] : m_StaticModels) {
             if (0 == model.InstanceCount)
@@ -174,13 +315,299 @@ namespace Ignis {
                     m_StaticPipelineLayout,
                     vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                     0, sizeof(StaticDrawData), &static_draw_data);
-                command_buffer.drawIndexed(mesh.IndexCount, model.InstanceCount, mesh.IndexOffset, mesh.VertexOffset, 0);
+                command_buffer.drawIndexed(
+                    mesh.IndexCount,
+                    model.InstanceCount,
+                    mesh.IndexOffset,
+                    static_cast<int32_t>(mesh.VertexOffset),
+                    0);
             }
         }
     }
 
     void BPR::updateCamera(const Camera &camera) const {
         Vulkan::CopyMemoryToAllocation(&camera, m_CameraBuffer.Allocation, 0, m_CameraBuffer.Size);
+
+        const auto inverse  = glm::inverse(camera.View);
+        const auto position = glm::vec3{inverse[3]};
+
+        Vulkan::CopyMemoryToAllocation(
+            &position,
+            m_LightDataBuffer.Allocation,
+            offsetof(LightData, ViewPosition),
+            sizeof(glm::vec3));
+    }
+
+    void BPR::setDirectionalLight(const DirectionalLight &light) const {
+        Vulkan::CopyMemoryToAllocation(&light, m_DirectionalLightBuffer.Allocation, 0, m_DirectionalLightBuffer.Size);
+    }
+
+    BPR::PointLightID BPR::addPointLight(const PointLight &light) {
+        uint32_t point_light_count = k_InvalidPointLightID;
+
+        Vulkan::CopyAllocationToMemory(
+            m_LightDataBuffer.Allocation,
+            offsetof(LightData, PointLightCount),
+            &point_light_count,
+            sizeof(uint32_t));
+        const uint32_t index = point_light_count++;
+        Vulkan::CopyMemoryToAllocation(
+            &point_light_count,
+            m_LightDataBuffer.Allocation,
+            offsetof(LightData, PointLightCount),
+            sizeof(uint32_t));
+
+        PointLightID id;
+        if (m_FreePointLightIDs.empty()) {
+            id = m_NextPointLightID++;
+        } else {
+            id = m_FreePointLightIDs.back();
+            m_FreePointLightIDs.pop_back();
+        }
+
+        if (sizeof(PointLight) * index >= m_PointLightBuffer.Size) {
+            m_FrameGraph.removeBuffer(m_FrameGraphPointLightBuffer.Buffer);
+
+            const Vulkan::Buffer old_buffer = m_PointLightBuffer;
+
+            m_PointLightBuffer = Vulkan::AllocateBuffer(
+                old_buffer.AllocationFlags,
+                old_buffer.MemoryUsage,
+                old_buffer.CreateFlags,
+                old_buffer.Size * 2,
+                old_buffer.Usage);
+
+            m_FrameGraphPointLightBuffer = FrameGraph::BufferInfo{
+                m_FrameGraph.importBuffer(
+                    m_PointLightBuffer.Handle,
+                    m_PointLightBuffer.Usage, 0,
+                    m_PointLightBuffer.Size),
+                0,
+                m_PointLightBuffer.Size,
+            };
+
+            Vulkan::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
+                Vulkan::CopyBufferToBuffer(
+                    old_buffer.Handle,
+                    m_PointLightBuffer.Handle,
+                    0, 0,
+                    old_buffer.Size,
+                    command_buffer);
+            });
+
+            Vulkan::DestroyBuffer(old_buffer);
+        }
+
+        Vulkan::CopyMemoryToAllocation(
+            &light,
+            m_PointLightStagingBuffer.Allocation,
+            0,
+            m_PointLightStagingBuffer.Size);
+
+        Vulkan::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
+            Vulkan::CopyBufferToBuffer(
+                m_PointLightStagingBuffer.Handle,
+                m_PointLightBuffer.Handle,
+                0,
+                sizeof(PointLight) * index,
+                m_PointLightStagingBuffer.Size,
+                command_buffer);
+        });
+
+        m_PointLightToIndex[id]    = index;
+        m_IndexToPointLight[index] = id;
+
+        return id;
+    }
+
+    BPR::SpotLightID BPR::addSpotLight(const SpotLight &light) {
+        uint32_t spot_light_count = k_InvalidSpotLightID;
+
+        Vulkan::CopyAllocationToMemory(
+            m_LightDataBuffer.Allocation,
+            offsetof(LightData, SpotLightCount),
+            &spot_light_count,
+            sizeof(uint32_t));
+        const uint32_t index = spot_light_count++;
+        Vulkan::CopyMemoryToAllocation(
+            &spot_light_count,
+            m_LightDataBuffer.Allocation,
+            offsetof(LightData, SpotLightCount),
+            sizeof(uint32_t));
+
+        SpotLightID id;
+        if (m_FreeSpotLightIDs.empty()) {
+            id = m_NextSpotLightID++;
+        } else {
+            id = m_FreeSpotLightIDs.back();
+            m_FreeSpotLightIDs.pop_back();
+        }
+
+        if (sizeof(SpotLight) * index >= m_SpotLightBuffer.Size) {
+            m_FrameGraph.removeBuffer(m_FrameGraphSpotLightBuffer.Buffer);
+
+            const Vulkan::Buffer old_buffer = m_SpotLightBuffer;
+
+            m_SpotLightBuffer = Vulkan::AllocateBuffer(
+                old_buffer.AllocationFlags,
+                old_buffer.MemoryUsage,
+                old_buffer.CreateFlags,
+                old_buffer.Size * 2,
+                old_buffer.Usage);
+
+            m_FrameGraphSpotLightBuffer = FrameGraph::BufferInfo{
+                m_FrameGraph.importBuffer(
+                    m_SpotLightBuffer.Handle,
+                    m_SpotLightBuffer.Usage, 0,
+                    m_SpotLightBuffer.Size),
+                0,
+                m_SpotLightBuffer.Size,
+            };
+
+            Vulkan::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
+                Vulkan::CopyBufferToBuffer(
+                    old_buffer.Handle,
+                    m_SpotLightBuffer.Handle,
+                    0, 0,
+                    old_buffer.Size,
+                    command_buffer);
+            });
+
+            Vulkan::DestroyBuffer(old_buffer);
+        }
+
+        Vulkan::CopyMemoryToAllocation(
+            &light,
+            m_SpotLightStagingBuffer.Allocation,
+            0,
+            m_SpotLightStagingBuffer.Size);
+
+        Vulkan::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
+            Vulkan::CopyBufferToBuffer(
+                m_SpotLightStagingBuffer.Handle,
+                m_SpotLightBuffer.Handle,
+                0,
+                sizeof(SpotLight) * index,
+                m_SpotLightStagingBuffer.Size,
+                command_buffer);
+        });
+
+        m_SpotLightToIndex[id]    = index;
+        m_IndexToSpotLight[index] = id;
+
+        return id;
+    }
+
+    void BPR::removePointLight(const PointLightID id) {
+        DIGNIS_ASSERT(m_PointLightToIndex.contains(id));
+
+        uint32_t point_light_count = k_InvalidPointLightID;
+
+        Vulkan::CopyAllocationToMemory(
+            m_LightDataBuffer.Allocation,
+            offsetof(LightData, PointLightCount),
+            &point_light_count,
+            sizeof(uint32_t));
+        const uint32_t last_index = --point_light_count;
+        Vulkan::CopyMemoryToAllocation(
+            &point_light_count,
+            m_LightDataBuffer.Allocation,
+            offsetof(LightData, PointLightCount),
+            sizeof(uint32_t));
+
+        if (const uint32_t index = m_PointLightToIndex[id];
+            index != last_index) {
+            Vulkan::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
+                Vulkan::CopyBufferToBuffer(
+                    m_PointLightBuffer.Handle,
+                    m_PointLightBuffer.Handle,
+                    sizeof(PointLight) * last_index,
+                    sizeof(PointLight) * index,
+                    sizeof(PointLight),
+                    command_buffer);
+            });
+
+            const PointLightID last_id = m_IndexToPointLight[last_index];
+
+            m_PointLightToIndex[last_id] = index;
+            m_IndexToPointLight[index]   = last_id;
+        }
+
+        m_PointLightToIndex.erase(id);
+        m_IndexToPointLight.erase(last_index);
+
+        m_FreePointLightIDs.push_back(id);
+    }
+
+    void BPR::removeSpotLight(const SpotLightID id) {
+        DIGNIS_ASSERT(m_SpotLightToIndex.contains(id));
+
+        uint32_t spot_light_count = k_InvalidSpotLightID;
+
+        Vulkan::CopyAllocationToMemory(
+            m_LightDataBuffer.Allocation,
+            offsetof(LightData, SpotLightCount),
+            &spot_light_count,
+            sizeof(uint32_t));
+        const uint32_t last_index = --spot_light_count;
+        Vulkan::CopyMemoryToAllocation(
+            &spot_light_count,
+            m_LightDataBuffer.Allocation,
+            offsetof(LightData, SpotLightCount),
+            sizeof(uint32_t));
+
+        if (const uint32_t index = m_SpotLightToIndex[id];
+            index != last_index) {
+            Vulkan::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
+                Vulkan::CopyBufferToBuffer(
+                    m_SpotLightBuffer.Handle,
+                    m_SpotLightBuffer.Handle,
+                    sizeof(SpotLight) * last_index,
+                    sizeof(SpotLight) * index,
+                    sizeof(SpotLight),
+                    command_buffer);
+            });
+
+            const SpotLightID last_id = m_IndexToSpotLight[last_index];
+
+            m_SpotLightToIndex[last_id] = index;
+            m_IndexToSpotLight[index]   = last_id;
+        }
+
+        m_SpotLightToIndex.erase(id);
+        m_IndexToSpotLight.erase(last_index);
+
+        m_FreeSpotLightIDs.push_back(id);
+    }
+
+    void BPR::setPointLight(const PointLightID id, const PointLight &light) {
+        DIGNIS_ASSERT(m_PointLightToIndex.contains(id));
+        const uint32_t index = m_PointLightToIndex[id];
+        Vulkan::CopyMemoryToAllocation(&light, m_PointLightStagingBuffer.Allocation, 0, m_PointLightStagingBuffer.Size);
+        Vulkan::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
+            Vulkan::CopyBufferToBuffer(
+                m_PointLightStagingBuffer.Handle,
+                m_PointLightBuffer.Handle,
+                0,
+                sizeof(PointLight) * index,
+                m_PointLightStagingBuffer.Size,
+                command_buffer);
+        });
+    }
+
+    void BPR::setSpotLight(const SpotLightID id, const SpotLight &light) {
+        DIGNIS_ASSERT(m_SpotLightToIndex.contains(id));
+        const uint32_t index = m_SpotLightToIndex[id];
+        Vulkan::CopyMemoryToAllocation(&light, m_SpotLightStagingBuffer.Allocation, 0, m_SpotLightStagingBuffer.Size);
+        Vulkan::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
+            Vulkan::CopyBufferToBuffer(
+                m_SpotLightStagingBuffer.Handle,
+                m_SpotLightBuffer.Handle,
+                0,
+                sizeof(SpotLight) * index,
+                m_SpotLightStagingBuffer.Size,
+                command_buffer);
+        });
     }
 
     BPR::StaticModelID BPR::loadStaticModel(const std::filesystem::path &path) {
@@ -307,8 +734,8 @@ namespace Ignis {
             });
 
         Vulkan::DescriptorSetWriter()
-            .writeStorageBuffer(2, id, model.InstanceBuffer.Handle, 0, model.InstanceBuffer.Size)
-            .update(m_StaticDescriptorSet);
+            .writeStorageBuffer(0, id, model.InstanceBuffer.Handle, 0, model.InstanceBuffer.Size)
+            .update(m_StaticDescriptor);
 
         model.InstanceCount     = 0;
         model.NextInstanceIndex = 0;
@@ -379,8 +806,8 @@ namespace Ignis {
             Vulkan::DestroyBuffer(old_buffer);
 
             Vulkan::DescriptorSetWriter()
-                .writeStorageBuffer(2, model_id, model.InstanceBuffer.Handle, 0, model.InstanceBuffer.Size)
-                .update(m_StaticDescriptorSet);
+                .writeStorageBuffer(0, model_id, model.InstanceBuffer.Handle, 0, model.InstanceBuffer.Size)
+                .update(m_StaticDescriptor);
         }
 
         Vulkan::CopyMemoryToAllocation(
@@ -639,7 +1066,7 @@ namespace Ignis {
 
             Vulkan::DescriptorSetWriter()
                 .writeStorageBuffer(1, m_MaterialBuffer.Handle, 0, m_MaterialBuffer.Size)
-                .update(m_StaticDescriptorSet);
+                .update(m_MaterialDescriptor);
         }
 
         Vulkan::CopyMemoryToAllocation(&material, m_MaterialStagingBuffer.Allocation, 0, sizeof(Material));
@@ -759,7 +1186,7 @@ namespace Ignis {
 
         Vulkan::DescriptorSetWriter()
             .writeCombinedImageSampler(0, id, view, vk::ImageLayout::eShaderReadOnlyOptimal, m_Sampler)
-            .update(m_StaticDescriptorSet);
+            .update(m_MaterialDescriptor);
 
         return id;
     }
@@ -814,7 +1241,7 @@ namespace Ignis {
 
         Vulkan::DescriptorSetWriter()
             .writeCombinedImageSampler(0, id, nullptr, vk::ImageLayout::eUndefined, m_Sampler)
-            .update(m_StaticDescriptorSet);
+            .update(m_MaterialDescriptor);
 
         m_FreeTextureIDs.push_back(id);
     }
