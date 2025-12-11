@@ -3,10 +3,9 @@
 namespace Ignis {
     FrameGraph::RenderPass::RenderPass(
         const std::string_view      label,
-        const std::array<float, 4> &label_color) {
-        m_Label      = label;
-        m_LabelColor = label_color;
-
+        const std::array<float, 4> &label_color)
+        : m_Label{label},
+          m_LabelColor{label_color} {
         m_ReadImages.clear();
         m_ReadBuffers.clear();
 
@@ -51,10 +50,9 @@ namespace Ignis {
 
     FrameGraph::ComputePass::ComputePass(
         const std::string_view      label,
-        const std::array<float, 4> &label_color) {
-        m_Label      = label;
-        m_LabelColor = label_color;
-
+        const std::array<float, 4> &label_color)
+        : m_Label{label},
+          m_LabelColor{label_color} {
         m_ReadImages.clear();
         m_WriteImages.clear();
         m_ImageBarriers.clear();
@@ -328,6 +326,7 @@ namespace Ignis {
         m_ViewMap.erase(view);
 
         m_ImageStates.remove(image);
+        m_FinalImageLayouts.erase(image);
 
         m_FreeImageIDs.push_back(image);
     }
@@ -478,12 +477,13 @@ namespace Ignis {
         return m_BufferStates[id].Size;
     }
 
-    vk::BufferUsageFlags FrameGraph::getBufferUsage(BufferID id) const {
+    vk::BufferUsageFlags FrameGraph::getBufferUsage(const BufferID id) const {
         DIGNIS_ASSERT(id < m_NextBufferID, "FrameGraph::BufferID is incorrect buffer id.");
         return m_BufferStates[id].Usage;
     }
 
     FrameGraph::ImageID FrameGraph::getSwapchainImageID() const {
+        DIGNIS_ASSERT(k_InvalidImageID != m_SwapchainImageID, "FrameGraph::ImageID frame has not started");
         return m_SwapchainImageID;
     }
 
@@ -545,12 +545,13 @@ namespace Ignis {
         executor.FinalBarriers.flushBarriers(command_buffer);
     }
 
-    FrameGraph::FrameGraph() {
+    FrameGraph::FrameGraph()
+        : m_SwapchainImageID{k_InvalidImageID} {
         clear();
     }
 
     void FrameGraph::clear() {
-        m_SwapchainImageID = 0;
+        m_SwapchainImageID = k_InvalidImageID;
 
         m_ImageStates.clear();
         m_BufferStates.clear();
@@ -848,8 +849,8 @@ namespace Ignis {
 
                 vk::Viewport viewport{};
                 viewport
-                    .setX(0)
-                    .setY(render_pass_extent.height)
+                    .setX(0.0f)
+                    .setY(static_cast<float>(render_pass_extent.height))
                     .setWidth(static_cast<float>(render_pass_extent.width))
                     .setHeight(-static_cast<float>(render_pass_extent.height))
                     .setMinDepth(0.0f)

@@ -7,6 +7,131 @@ namespace Ignis {
         return false;
     }
 
+    glm::mat4x4 Editor::ComposeTRS(const glm::vec3 &position, const glm::vec3 &rotation, const float scale) {
+        const glm::mat4x4 scaled     = glm::scale(glm::mat4x4{1.0f}, glm::vec3{scale});
+        const glm::mat4x4 rotated    = glm::toMat4(glm::quat{glm::radians(rotation)});
+        const glm::mat4x4 translated = glm::translate(glm::mat4x4{1.0f}, position);
+        return translated * rotated * scaled;
+    }
+
+    void Editor::RenderStaticModelPanel(StaticModelPanelState &state, BPR *bpr) {
+        ImGui::SeparatorText("Load Static Model");
+        static char static_model_path[1024];
+        ImGui::InputText("path", static_model_path, 1024);
+
+        if (ImGui::Button("Load Static Model")) {
+            if (const std::string_view path = static_model_path;
+                std::filesystem::exists(path)) {
+                if (const auto model = bpr->loadStaticModel(path);
+                    !state.StaticModelUIStates.contains(model)) {
+                    state.StaticModelUIStates[model] = AddUIState{};
+                    state.StaticInstances[model].clear();
+                    state.StaticModels.push_back(model);
+                }
+            } else {
+                DIGNIS_LOG_ENGINE_WARN("No static model exists on path: {}", path);
+            }
+        }
+
+        gtl::flat_hash_map<BPR::StaticModelID, std::vector<BPR::StaticInstanceID>> instances_to_remove{};
+
+        std::vector<BPR::StaticModelID> models_to_remove{};
+
+        ImGui::SeparatorText("Loaded Static Models");
+        for (uint32_t model_index = 0; model_index < state.StaticModels.size(); model_index++) {
+            const auto &model = state.StaticModels[model_index];
+            ImGui::PushID(model_index);
+            ImGui::Text("Path: %s", bpr->getStaticModelConstRef(model).Path.c_str());
+
+            {
+                ImGui::SeparatorText("Add Static Instance");
+                static auto add_position = glm::vec3{0.0f};
+                static auto add_rotation = glm::vec3{0.0f};
+                static auto add_scale    = 1.0f;
+
+                ImGui::DragFloat3("Position", glm::value_ptr(add_position), 0.1f);
+                ImGui::DragFloat3("Rotation", glm::value_ptr(add_rotation), 1.0f);
+                ImGui::DragFloat("Scale", &add_scale, 0.0005f, 0.0f, 10.0f, "%.6f");
+
+                if (ImGui::Button("Add Instance")) {
+                    const glm::mat4x4 scaled     = glm::scale(glm::mat4x4{1.0f}, glm::vec3{add_scale});
+                    const glm::mat4x4 rotated    = glm::toMat4(glm::quat(glm::radians(add_rotation)));
+                    const glm::mat4x4 translated = glm::translate(glm::mat4x4{1.0f}, add_position);
+
+                    const glm::mat4x4 final = translated * rotated * scaled;
+
+                    state.StaticInstances[model].push_back(bpr->addStaticInstance(model, {final, glm::mat4x4{1.0f}}));
+                    state.StaticInstanceUIStates[state.StaticInstances[model].back()] = InstanceUIState{
+                        add_position,
+                        add_rotation,
+                        add_scale,
+                        true,
+                    };
+                }
+            }
+
+            ImGui::SeparatorText("Static Instances");
+            for (uint32_t instance_index = 0; instance_index < state.StaticInstances[model].size(); instance_index++) {
+                ImGui::PushID(instance_index);
+                ImGui::Text("Instance %u", instance_index);
+
+                auto &[position, rotation, scale, initialized] = state.StaticInstanceUIStates[state.StaticInstances[model][instance_index]];
+
+                ImGui::DragFloat3("Position", glm::value_ptr(position), 0.1f);
+                ImGui::DragFloat3("Rotation", glm::value_ptr(rotation), 1.0f);
+                ImGui::DragFloat("Scale", &scale, 0.0005f, 0.0f, 10.0f, "%.6f");
+
+                const glm::mat4x4 scaled     = glm::scale(glm::mat4x4{1.0f}, glm::vec3{scale});
+                const glm::mat4x4 rotated    = glm::toMat4(glm::quat(glm::radians(rotation)));
+                const glm::mat4x4 translated = glm::translate(glm::mat4x4{1.0f}, position);
+
+                const glm::mat4x4 model_transform = translated * rotated * scaled;
+
+                bpr->setStaticInstance(state.StaticInstances[model][instance_index], {model_transform, glm::mat4x4{1.0f}});
+
+                if (ImGui::Button("Remove Instance")) {
+                    instances_to_remove[model].push_back(state.StaticInstances[model][instance_index]);
+                }
+
+                ImGui::Separator();
+                ImGui::PopID();
+            }
+
+            if (ImGui::Button("Unload Model")) {
+                models_to_remove.push_back(model);
+            }
+
+            ImGui::Separator();
+            ImGui::PopID();
+        }
+
+        ImGui::End();
+
+        for (auto &[model, instances] : instances_to_remove) {
+            while (!instances.empty()) {
+                const auto instance = instances.back();
+                instances.pop_back();
+                bpr->removeStaticInstance(instance);
+                state.StaticInstanceUIStates.erase(instance);
+
+                if (const auto it = std::ranges::find(state.StaticInstances[model], instance);
+                    it != std::end(state.StaticInstances[model]))
+                    state.StaticInstances[model].erase(it);
+            }
+        }
+
+        while (!models_to_remove.empty()) {
+            const auto model = models_to_remove.back();
+            models_to_remove.pop_back();
+            bpr->unloadStaticModel(model);
+            state.StaticInstances.erase(model);
+
+            if (const auto it = std::ranges::find(state.StaticModels, model);
+                it != std::end(state.StaticModels))
+                state.StaticModels.erase(it);
+        }
+    }
+
     Editor::Editor(const Settings &settings) {
         attachCallback<WindowCloseEvent>(OnWindowClose);
         attachCallback<WindowKeyEvent>(&Editor::onKeyEvent);
@@ -22,14 +147,10 @@ namespace Ignis {
 
         createViewportImage(engine.getUISystem<ImGuiSystem>(), 1, 1, frame_graph);
 
-        m_pBlinnPhong = engine.addRenderModule<BlinnPhong>(BlinnPhong::Settings{
+        m_pBPR = std::make_unique<BPR>(BPR::Settings{
             m_ViewportImage.Format,
             m_DepthImage.Format,
         });
-
-        m_Model = m_pBlinnPhong->loadStaticModel("Assets/Models/vanguard/flair.fbx", frame_graph);
-
-        m_StaticInstances.push_back(m_pBlinnPhong->addStaticInstance(m_Model, {glm::mat4x4{1.0f / 100.0f}}, frame_graph));
 
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor attached");
     }
@@ -39,9 +160,11 @@ namespace Ignis {
 
         Engine &engine = Engine::GetRef();
 
-        engine.removeRenderModule<BlinnPhong>();
+        FrameGraph &frame_graph = engine.getFrameGraph();
 
-        destroyViewportImage(engine.getUISystem<ImGuiSystem>(), engine.getFrameGraph());
+        m_pBPR = nullptr;
+
+        destroyViewportImage(engine.getUISystem<ImGuiSystem>(), frame_graph);
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor detached");
     }
 
@@ -65,7 +188,7 @@ namespace Ignis {
         const auto height = static_cast<float>(m_ViewportImage.Extent.height);
         const auto aspect = width / height;
 
-        m_pBlinnPhong->updateCamera({m_Camera.getProjection(aspect), m_Camera.getView()});
+        m_pBPR->updateCamera({m_Camera.getProjection(aspect), m_Camera.getView()});
     }
 
     void Editor::onGUI(IGUISystem *ui_system) {
@@ -77,79 +200,7 @@ namespace Ignis {
             ImGui_ImplGlfw_RestoreCallbacks(Window::GetHandle());
         }
 
-        ImGui::SeparatorText("Adding Instances");
-        static glm::vec3 add_position = glm::vec3{0.0f};
-        static glm::vec3 add_rotation = glm::vec3{0.0f};
-        static float     add_scale    = 1.0f;
-
-        ImGui::DragFloat3("Position", glm::value_ptr(add_position));
-        ImGui::DragFloat3("Rotation", glm::value_ptr(add_rotation));
-        ImGui::DragFloat("Scale", &add_scale, 0.0005f, 0.0f, 10.0f, "%.4f");
-
-        if (ImGui::Button("Add Instance")) {
-            const glm::mat4x4 scaled     = glm::scale(glm::mat4x4{1.0f}, glm::vec3{add_scale});
-            const glm::mat4x4 rotated    = glm::toMat4(glm::quat(glm::radians(add_rotation)));  // Fixed: radians, not normalize
-            const glm::mat4x4 translated = glm::translate(glm::mat4x4{1.0f}, add_position);
-
-            const glm::mat4x4 final = translated * rotated * scaled;
-
-            m_StaticInstances.push_back(m_pBlinnPhong->addStaticInstance(m_Model, {final}, Engine::GetRef().getFrameGraph()));
-        }
-
-        ImGui::SeparatorText("Existing Instances");
-
-        static std::vector<BlinnPhong::StaticInstanceHandle> to_remove{};
-        to_remove.clear();
-
-        for (uint32_t i = 0; i < m_StaticInstances.size(); i++) {
-            ImGui::PushID(i);  // Unique ID for each instance's widgets
-
-            BlinnPhong::StaticInstance instance = m_pBlinnPhong->getStaticInstance(m_Model, m_StaticInstances[i]);
-
-            glm::vec3 position{};
-            glm::quat orientation{};
-            glm::vec3 scale{};
-            glm::vec3 skew{};
-            glm::vec4 perspective{};
-
-            glm::decompose(instance.Transform, scale, orientation, position, skew, perspective);
-
-            glm::vec3 rotation_deg = glm::degrees(glm::eulerAngles(orientation));
-
-            ImGui::Text("Instance %u", i);
-
-            ImGui::DragFloat3("Position", glm::value_ptr(position), 0.1f);
-            ImGui::DragFloat3("Rotation", glm::value_ptr(rotation_deg), 1.0f);
-            ImGui::DragFloat("Scale", &scale.x, 0.0005f, 0.0f, 10.0f, "%.4f");
-
-            if (ImGui::Button("Remove Instance")) {
-                to_remove.push_back(m_StaticInstances[i]);
-            }
-
-            glm::mat4x4 scaled     = glm::scale(glm::mat4x4{1.0f}, glm::vec3{scale.x});
-            glm::mat4x4 rotated    = glm::toMat4(glm::quat(glm::radians(rotation_deg)));
-            glm::mat4x4 translated = glm::translate(glm::mat4x4{1.0f}, position);
-
-            instance.Transform = translated * rotated * scaled;
-
-            m_pBlinnPhong->setStaticInstance(m_Model, m_StaticInstances[i], instance);
-
-            ImGui::Separator();
-            ImGui::PopID();
-        }
-
-        while (!to_remove.empty()) {
-            Vulkan::WaitDeviceIdle();
-            auto instance = to_remove.back();
-            to_remove.pop_back();
-            m_pBlinnPhong->removeStaticInstance(m_Model, instance);
-            if (auto it = std::ranges::find(m_StaticInstances, instance);
-                it != std::end(m_StaticInstances)) {
-                m_StaticInstances.erase(it);
-            }
-        }
-
-        ImGui::End();
+        RenderStaticModelPanel(m_StaticModelPanelState, m_pBPR.get());
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -177,7 +228,7 @@ namespace Ignis {
             {0.0f, 1.0f, 0.0f, 1.0f},
         };
 
-        m_pBlinnPhong->onRenderPass(editor_pass);
+        m_pBPR->onRenderPass(editor_pass);
 
         editor_pass
             .setColorAttachments({FrameGraph::Attachment{
@@ -193,7 +244,7 @@ namespace Ignis {
                 vk::AttachmentStoreOp::eStore,
             })
             .setExecute([this](const vk::CommandBuffer command_buffer) {
-                m_pBlinnPhong->onDraw(command_buffer);
+                m_pBPR->onDraw(command_buffer);
             });
 
         frame_graph.addRenderPass(editor_pass);
@@ -254,7 +305,7 @@ namespace Ignis {
             m_ViewportImage.Handle,
             m_ViewportView,
             m_ViewportImage.Format,
-            m_ViewportImage.UsageFlags,
+            m_ViewportImage.Usage,
             m_ViewportExtent,
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal);
@@ -263,7 +314,7 @@ namespace Ignis {
             m_DepthImage.Handle,
             m_DepthView,
             m_DepthImage.Format,
-            m_DepthImage.UsageFlags,
+            m_DepthImage.Usage,
             m_ViewportExtent,
             vk::ImageLayout::eDepthAttachmentOptimal,
             vk::ImageLayout::eDepthAttachmentOptimal);
@@ -290,7 +341,7 @@ namespace Ignis {
         if (KeyAction::ePress != event.Action)
             return false;
 
-        if (KeyCode::eF == event.Key) {
+        if (KeyCode::eF11 == event.Key) {
             if (Window::IsFullscreen())
                 Window::MakeWindowed();
             else

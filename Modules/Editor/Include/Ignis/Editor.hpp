@@ -2,8 +2,9 @@
 
 #include <Ignis/Engine.hpp>
 
+#include <Ignis/RenderModule.hpp>
+
 #include <Ignis/ImGuiSystem.hpp>
-#include <Ignis/BlinnPhong.hpp>
 
 namespace Ignis {
     class Editor final : public Layer<Editor> {
@@ -11,8 +12,39 @@ namespace Ignis {
         struct Settings {
         };
 
+        struct AddUIState {
+            glm::vec3 Position;
+            glm::vec3 Rotation;
+            float     Scale;
+        };
+
+        struct InstanceUIState {
+            glm::vec3 Position;
+            glm::vec3 Rotation;
+
+            float Scale;
+            bool  IsInitialized{false};
+        };
+
+        struct StaticModelPanelState {
+            std::vector<BPR::StaticModelID> StaticModels;
+
+            gtl::flat_hash_map<BPR::StaticModelID, AddUIState> StaticModelUIStates;
+
+            gtl::flat_hash_map<BPR::StaticModelID, std::vector<BPR::StaticInstanceID>> StaticInstances;
+
+            gtl::flat_hash_map<BPR::StaticInstanceID, InstanceUIState> StaticInstanceUIStates;
+        };
+
        public:
         static bool OnWindowClose(const WindowCloseEvent &);
+
+        static glm::mat4x4 ComposeTRS(
+            const glm::vec3 &position,
+            const glm::vec3 &rotation,
+            float            scale);
+
+        static void RenderStaticModelPanel(StaticModelPanelState &state, BPR *bpr);
 
        public:
         explicit Editor(const Settings &settings);
@@ -50,10 +82,8 @@ namespace Ignis {
         FrameGraph::ImageID m_ViewportImageID{FrameGraph::k_InvalidImageID};
         FrameGraph::ImageID m_DepthImageID{FrameGraph::k_InvalidImageID};
 
-        BlinnPhong *m_pBlinnPhong;
+        std::unique_ptr<BPR> m_pBPR;
 
-        BlinnPhong::StaticModelHandle m_Model;
-
-        std::vector<BlinnPhong::StaticInstanceHandle> m_StaticInstances;
+        StaticModelPanelState m_StaticModelPanelState;
     };
 }  // namespace Ignis

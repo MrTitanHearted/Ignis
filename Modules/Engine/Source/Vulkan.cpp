@@ -189,6 +189,11 @@ namespace Ignis {
         return s_pInstance->m_VmaAllocator.getAllocationInfo(allocation);
     }
 
+    vma::AllocationInfo Vulkan::GetAllocationInfo(const Buffer &buffer) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        return s_pInstance->m_VmaAllocator.getAllocationInfo(buffer.Allocation);
+    }
+
     void Vulkan::initialize(const Settings &settings) {
         DIGNIS_ASSERT(nullptr == s_pInstance, "Ignis::Vulkan is already initialized.");
 

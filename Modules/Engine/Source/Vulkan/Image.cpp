@@ -46,7 +46,12 @@ namespace Ignis {
         image.Format     = format;
         image.Extent     = extent;
         image.Allocation = allocation;
-        image.UsageFlags = usage_flags;
+        image.Usage      = usage_flags;
+
+        image.CreateFlags = image_flags;
+        image.MemoryUsage = memory_usage;
+
+        image.AllocationFlags = allocation_flags;
 
         return image;
     }
@@ -86,7 +91,12 @@ namespace Ignis {
         image.Format     = format;
         image.Extent     = vk::Extent3D{extent, 1};
         image.Allocation = allocation;
-        image.UsageFlags = usage_flags;
+        image.Usage      = usage_flags;
+
+        image.CreateFlags = image_flags;
+        image.MemoryUsage = memory_usage;
+
+        image.AllocationFlags = allocation_flags;
 
         return image;
     }

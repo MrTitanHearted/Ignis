@@ -42,7 +42,12 @@ namespace Ignis {
 
             vma::Allocation Allocation;
 
-            vk::ImageUsageFlags UsageFlags;
+            vk::ImageUsageFlags Usage;
+
+            vk::ImageCreateFlags CreateFlags;
+            vma::MemoryUsage     MemoryUsage;
+
+            vma::AllocationCreateFlags AllocationFlags;
         };
 
         struct Buffer {
@@ -51,7 +56,12 @@ namespace Ignis {
 
             vma::Allocation Allocation;
 
-            vk::BufferUsageFlags UsageFlags;
+            vk::BufferUsageFlags Usage;
+
+            vk::BufferCreateFlags CreateFlags;
+            vma::MemoryUsage      MemoryUsage;
+
+            vma::AllocationCreateFlags AllocationFlags;
         };
 
         struct VertexLayout {
@@ -398,6 +408,7 @@ namespace Ignis {
         static void FlushAllocation(const vma::Allocation &allocation, uint64_t offset, uint64_t size);
 
         static vma::AllocationInfo GetAllocationInfo(const vma::Allocation &allocation);
+        static vma::AllocationInfo GetAllocationInfo(const Buffer &buffer);
 
 #pragma region Buffer
         static void DestroyBuffer(const Buffer &buffer);

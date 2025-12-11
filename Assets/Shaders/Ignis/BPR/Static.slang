@@ -17,46 +17,40 @@ struct VertexOutput {
     [[vk::location(2)]]
     float2 UV;
     [[vk::location(3)]]
-    uint MaterialID;
+    uint Material;
 };
 
 typedef VertexOutput FragmentInput;
 
-struct SampledTexture {
-    uint TextureID;
-    uint SamplerID;
-};
-
 struct Material {
-    SampledTexture DiffuseTexture;
-    SampledTexture SpecularTexture;
+    uint DiffuseTexture;
+    uint SpecularTexture;
 
     float Shininess;
 };
 
 struct Instance {
-    column_major float4x4 Transform;
+    column_major float4x4 ModelTransform;
+    column_major float4x4 NormalTransform;
 };
 
 struct Camera {
-    float4x4 Projection;
-    float4x4 View;
+    column_major float4x4 Projection;
+    column_major float4x4 View;
 };
 
 [[vk::binding(0, 0)]]
-SamplerState gSamplers[];
+Sampler2D gTextures[];
 [[vk::binding(1, 0)]]
-Texture2D gTextures[];
-[[vk::binding(2, 0)]]
 StructuredBuffer<Material> gMaterials;
-[[vk::binding(3, 0)]]
+[[vk::binding(2, 0)]]
 StructuredBuffer<Instance> gInstances[];
-[[vk::binding(4, 0)]]
+[[vk::binding(3, 0)]]
 ConstantBuffer<Camera> gCamera;
 
 struct DrawData {
-    uint MaterialID;
-    uint InstanceID;
+    uint Material;
+    uint Instance;
 };
 
 [[vk::push_constant]]
@@ -64,27 +58,29 @@ DrawData gDrawData;
 
 [shader("vertex")]
 VertexOutput vs_main(Vertex input, uint instance_index: SV_InstanceID) {
-    Instance instance = gInstances[gDrawData.InstanceID].Load(instance_index);
-    column_major float4x4 model = instance.Transform;
+    Instance instance = gInstances[gDrawData.Instance].Load(instance_index);
+
+    column_major float4x4 model  = instance.ModelTransform;
+    column_major float4x4 normal = instance.NormalTransform;
 
     VertexOutput output;
 
     output.Position = mul(gCamera.Projection, mul(gCamera.View, mul(model, float4(input.Position, 1.0f))));
-    output.Normal   = mul(float3x3(model), input.Normal);
+    // output.Position = mul(gCamera.Projection, mul(gCamera.View, float4(input.Position, 1.0f)));
+    output.Normal   = mul(float3x3(normal), input.Normal);
     output.UV       = input.UV;
 
-    output.MaterialID = gDrawData.MaterialID;
+    output.Material = gDrawData.Material;
 
     return output;
 }
 
 [shader("fragment")]
 float4 fs_main(FragmentInput input) : SV_Target {
-    Material material = gMaterials[input.MaterialID];
+    Material material = gMaterials[input.Material];
 
-    Texture2D    diffuse_texture = gTextures[material.DiffuseTexture.TextureID];
-    SamplerState diffuse_sampler = gSamplers[material.DiffuseTexture.SamplerID];
+    Sampler2D diffuse_texture = gTextures[material.DiffuseTexture];
 
-    return diffuse_texture.Sample(diffuse_sampler, input.UV);
+    return diffuse_texture.Sample(input.UV);
 }
 

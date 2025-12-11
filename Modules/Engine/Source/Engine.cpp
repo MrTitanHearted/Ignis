@@ -76,9 +76,8 @@ namespace Ignis {
 
             m_GUISystem->onGUIEnd();
 
-            if (!m_Frame.begin()) {
+            if (!m_Frame.begin())
                 continue;
-            }
 
             FrameGraph &frame_graph = m_Frame.getFrameGraph();
 
@@ -88,7 +87,7 @@ namespace Ignis {
             m_GUISystem->onRender(frame_graph);
 
             if (!m_Frame.end(frame_graph.endFrame())) {
-                continue;
+                // continue;
             }
         }
     }

@@ -32,7 +32,12 @@ namespace Ignis {
         buffer.Handle     = handle;
         buffer.Size       = size;
         buffer.Allocation = allocation;
-        buffer.UsageFlags = usage_flags;
+        buffer.Usage      = usage_flags;
+
+        buffer.CreateFlags = buffer_flags;
+        buffer.MemoryUsage = memory_usage;
+
+        buffer.AllocationFlags = allocation_flags;
 
         return buffer;
     }

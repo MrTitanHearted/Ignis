@@ -13,6 +13,10 @@ namespace Ignis {
         ILayer(Engine *engine, std::type_index layer_id);
         virtual ~ILayer() = default;
 
+        template <typename TLayer, typename... Args>
+            requires(std::is_base_of_v<ILayer, TLayer>)
+        void transition(Args &&...args);
+
        protected:
         virtual void onUpdate(double dt) {}
 

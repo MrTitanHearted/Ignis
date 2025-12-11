@@ -9,7 +9,6 @@
 
 #include <Ignis/Engine/GUISystem.hpp>
 #include <Ignis/Engine/Layer.hpp>
-#include <Ignis/Engine/RenderModule.hpp>
 
 namespace Ignis {
     class Engine {
@@ -78,52 +77,6 @@ namespace Ignis {
             return static_cast<TLayer *>(m_LayerStack[it->second].get());
         }
 
-        template <typename TRenderModule>
-            requires(std::is_base_of_v<IRenderModule, TRenderModule>)
-        void removeRenderModule() {
-            DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized.");
-            const std::type_index type = typeid(TRenderModule);
-
-            DIGNIS_ASSERT(
-                m_RenderModules.find(type) != std::end(m_RenderModules),
-                "Ignis::Engine::removeRenderModule<{}>: RenderModule not found.",
-                std::string_view{type.name()});
-
-            m_RenderModules[type]->onDetach(m_Frame.getFrameGraph());
-            m_RenderModules.erase(type);
-        }
-
-        template <typename TRenderModule, typename... Args>
-            requires(std::is_base_of_v<IRenderModule, TRenderModule>)
-        TRenderModule *addRenderModule(Args &&...args) {
-            DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized.");
-            const std::type_index type = typeid(TRenderModule);
-
-            DIGNIS_ASSERT(
-                m_RenderModules.find(type) == std::end(m_RenderModules),
-                "Ignis::Engine::addRenderModule<{}>: RenderModule already added.",
-                std::string_view{type.name()});
-
-            m_RenderModules[type] = std::make_unique<TRenderModule>(std::forward<Args>(args)...);
-            m_RenderModules[type]->onAttach(m_Frame.getFrameGraph());
-
-            return static_cast<TRenderModule *>(m_RenderModules[type].get());
-        }
-
-        template <typename TRenderModule, typename... Args>
-            requires(std::is_base_of_v<IRenderModule, TRenderModule>)
-        TRenderModule *getRenderModule() {
-            DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized.");
-            const std::type_index type = typeid(TRenderModule);
-
-            DIGNIS_ASSERT(
-                m_RenderModules.find(type) != std::end(m_RenderModules),
-                "Ignis::Engine::removeRenderModule<{}>: RenderModule not found.",
-                std::string_view{type.name()});
-
-            return static_cast<TRenderModule *>(m_RenderModules[type].get());
-        }
-
        private:
         IGNIS_IF_DEBUG(class State {
            public:
@@ -144,8 +97,6 @@ namespace Ignis {
 
         std::vector<std::unique_ptr<ILayer>>        m_LayerStack;
         gtl::flat_hash_map<std::type_index, size_t> m_LayerLookUp;
-
-        gtl::flat_hash_map<std::type_index, std::unique_ptr<IRenderModule>> m_RenderModules;
 
        private:
         friend class IGUISystem;

@@ -6,6 +6,20 @@ namespace Ignis {
     inline ILayer::ILayer(Engine *engine, const std::type_index layer_id)
         : m_pEngine{engine}, m_LayerID{layer_id} {}
 
+    template <typename TLayer, typename... Args>
+        requires(std::is_base_of_v<ILayer, TLayer>)
+    void ILayer::transition(Args &&...args) {
+        m_pEngine->m_Window.postTask([engine = m_pEngine, layer_id = m_LayerID, args...] {
+            const size_t index = engine->m_LayerLookUp[layer_id];
+
+            engine->m_LayerLookUp.erase(layer_id);
+
+            engine->m_LayerStack[index] = std::make_unique<TLayer>(std::forward<Args>(args)...);
+
+            engine->m_LayerLookUp[engine->m_LayerStack[index]->m_LayerID] = index;
+        });
+    }
+
     template <typename TEvent, typename Callback>
         requires(std::is_base_of_v<IEvent, TEvent>)
     void ILayer::attachCallback(Callback callback) const {
