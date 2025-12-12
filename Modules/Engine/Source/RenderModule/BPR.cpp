@@ -1107,7 +1107,7 @@ namespace Ignis {
 
         const std::optional<TextureAsset> texture_asset_opt =
             nullptr != ai_texture
-                ? TextureAsset::LoadFromMemory(ai_texture->pcData, ai_texture->mWidth * ai_texture->mHeight * sizeof(aiTexel), TextureAsset::Type::eRGBA8u)
+                ? TextureAsset::LoadFromMemory(ai_texture->pcData, ai_texture->mWidth, TextureAsset::Type::eRGBA8u)
                 : TextureAsset::LoadFromPath(texture_path, TextureAsset::Type::eRGBA8u);
         DIGNIS_ASSERT(texture_asset_opt.has_value());
         const TextureAsset &texture_asset = texture_asset_opt.value();

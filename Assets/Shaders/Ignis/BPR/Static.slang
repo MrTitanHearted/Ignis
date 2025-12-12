@@ -191,8 +191,8 @@ float3 CalculateDirectionLight(
 
     float diffuse_power = max(dot(normal, light_direction), 0.0f);
 
-    float3 reflect_direction = reflect(-light_direction, normal);
-    float  specular_power    = pow(max(dot(view_direction, reflect_direction), 0.0f), shininess);
+    float3 halfway_direction = normalize(light_direction + view_direction);
+    float  specular_power    = pow(max(dot(normal, halfway_direction), 0.0f), shininess);
 
     float3 ambient  = light.Ambient * material_diffuse;
     float3 diffuse  = light.Diffuse * diffuse_power * material_diffuse;
@@ -212,8 +212,8 @@ float3 CalculatePointLight(
 
     float diffuse_power = max(dot(normal, light_direction), 0.0f);
 
-    float3 reflect_direction = reflect(-light_direction, normal);
-    float  specular_power    = pow(max(dot(view_direction, light_direction), 0.0f), shininess);
+    float3 halfway_direction = normalize(light_direction + view_direction);
+    float  specular_power    = pow(max(dot(normal, halfway_direction), 0.0f), shininess);
 
     float distance    = length(light.Position - fragment_position);
     float attenuation = 1.0f / (light.Constant + light.Linear * distance + light.Quadratic * distance * distance);
@@ -239,8 +239,8 @@ float3 CalculateSpotLight(
 
     float diffuse_power = max(dot(normal, light_direction), 0.0f);
 
-    float3 reflect_direction = reflect(-light_direction, normal);
-    float  specular_power    = pow(max(dot(view_direction, light_direction), 0.0f), shininess);
+    float3 halfway_direction = normalize(light_direction + view_direction);
+    float  specular_power    = pow(max(dot(normal, halfway_direction), 0.0f), shininess);
 
     float distance    = length(light.Position - fragment_position);
     float attenuation = 1.0f / (light.Constant + light.Linear * distance + light.Quadratic * distance * distance);
