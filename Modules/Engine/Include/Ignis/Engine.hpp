@@ -7,6 +7,8 @@
 #include <Ignis/Vulkan.hpp>
 #include <Ignis/Frame.hpp>
 
+#include <Ignis/RenderModule.hpp>
+
 #include <Ignis/Engine/GUISystem.hpp>
 #include <Ignis/Engine/Layer.hpp>
 

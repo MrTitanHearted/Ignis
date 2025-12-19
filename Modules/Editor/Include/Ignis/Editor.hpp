@@ -27,35 +27,30 @@ namespace Ignis {
         };
 
         struct LightPanelState {
-            BPR::DirectionalLight DirectionalLight;
+            PBR::DirectionalLight DirectionalLight;
 
-            std::vector<BPR::PointLightID> PointLights;
-            std::vector<BPR::SpotLightID>  SpotLights;
+            std::vector<PBR::PointLightID> PointLights;
+            std::vector<PBR::SpotLightID>  SpotLights;
 
-            gtl::flat_hash_map<BPR::PointLightID, BPR::PointLight> PointLightValues;
-            gtl::flat_hash_map<BPR::SpotLightID, BPR::SpotLight>   SpotLightValues;
+            gtl::flat_hash_map<PBR::PointLightID, PBR::PointLight> PointLightValues;
+            gtl::flat_hash_map<PBR::SpotLightID, PBR::SpotLight>   SpotLightValues;
         };
 
         struct StaticModelPanelState {
-            std::vector<BPR::StaticModelID> StaticModels;
+            std::vector<PBR::StaticModelID> StaticModels;
 
-            gtl::flat_hash_map<BPR::StaticModelID, AddUIState> StaticModelUIStates;
+            gtl::flat_hash_map<PBR::StaticModelID, AddUIState> StaticModelUIStates;
 
-            gtl::flat_hash_map<BPR::StaticModelID, std::vector<BPR::StaticInstanceID>> StaticInstances;
+            gtl::flat_hash_map<PBR::StaticModelID, std::vector<PBR::StaticInstanceID>> StaticInstances;
 
-            gtl::flat_hash_map<BPR::StaticInstanceID, InstanceUIState> StaticInstanceUIStates;
+            gtl::flat_hash_map<PBR::StaticInstanceID, InstanceUIState> StaticInstanceUIStates;
         };
 
        public:
         static bool OnWindowClose(const WindowCloseEvent &);
 
-        static glm::mat4x4 ComposeTRS(
-            const glm::vec3 &position,
-            const glm::vec3 &rotation,
-            float            scale);
-
-        static void RenderLightPanel(LightPanelState &state, BPR *bpr);
-        static void RenderStaticModelPanel(StaticModelPanelState &state, BPR *bpr);
+        static void RenderLightPanel(LightPanelState &state, PBR *pbr);
+        static void RenderStaticModelPanel(StaticModelPanelState &state, PBR *pbr);
 
        public:
         explicit Editor(const Settings &settings);
@@ -93,7 +88,7 @@ namespace Ignis {
         FrameGraph::ImageID m_ViewportImageID{FrameGraph::k_InvalidImageID};
         FrameGraph::ImageID m_DepthImageID{FrameGraph::k_InvalidImageID};
 
-        std::unique_ptr<BPR> m_pBPR;
+        std::unique_ptr<PBR> m_pPBR;
 
         LightPanelState m_LightPanelState;
 

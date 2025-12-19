@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Ignis/Core/AssimpToGlm.hpp>
 #include <Ignis/Core/Defines.hpp>
 #include <Ignis/Core/PCH.hpp>
 #include <Ignis/Core/Logger.hpp>

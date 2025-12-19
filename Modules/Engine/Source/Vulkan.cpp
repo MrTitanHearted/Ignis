@@ -324,7 +324,12 @@ namespace Ignis {
         vulkan11_features
             .setShaderDrawParameters(vk::True)
             .setPNext(&vulkan12_features);
-        features.setPNext(&vulkan11_features);
+        features
+            .setFeatures(
+                vk::PhysicalDeviceFeatures()
+                    .setRobustBufferAccess(vk::True)
+                    .setMultiDrawIndirect(vk::True))
+            .setPNext(&vulkan11_features);
 
         std::vector<float> queue_priorities{};
         queue_priorities.reserve(3);
@@ -369,11 +374,13 @@ namespace Ignis {
             .setDevice(m_Device)
             .setVulkanApiVersion(VK_API_VERSION_1_4);
 
-        auto [result, vma_allocator] = vma::createAllocator(vma_allocator_create_info);
+        {
+            auto [result, vma_allocator] = vma::createAllocator(vma_allocator_create_info);
 
-        IGNIS_VK_CHECK(result);
+            IGNIS_VK_CHECK(result);
 
-        m_VmaAllocator = vma_allocator;
+            m_VmaAllocator = vma_allocator;
+        }
 
         {
             auto [result, command_pool] = m_Device.createCommandPool(vk::CommandPoolCreateInfo{

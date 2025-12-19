@@ -7,27 +7,18 @@ namespace Ignis {
         return false;
     }
 
-    glm::mat4x4 Editor::ComposeTRS(const glm::vec3 &position, const glm::vec3 &rotation, const float scale) {
-        const glm::mat4x4 scaled     = glm::scale(glm::mat4x4{1.0f}, glm::vec3{scale});
-        const glm::mat4x4 rotated    = glm::toMat4(glm::quat{glm::radians(rotation)});
-        const glm::mat4x4 translated = glm::translate(glm::mat4x4{1.0f}, position);
-        return translated * rotated * scaled;
-    }
-
-    void Editor::RenderLightPanel(LightPanelState &state, BPR *bpr) {
-        std::vector<BPR::PointLightID> point_lights_to_remove{};
-        std::vector<BPR::SpotLightID>  spot_lights_to_remove{};
+    void Editor::RenderLightPanel(LightPanelState &state, PBR *pbr) {
+        std::vector<PBR::PointLightID> point_lights_to_remove{};
+        std::vector<PBR::SpotLightID>  spot_lights_to_remove{};
 
         ImGui::SeparatorText("Directional Light");
         ImGui::PushID("Directional Light");
         {
             bool changed = ImGui::DragFloat3("Direction", glm::value_ptr(state.DirectionalLight.Direction), 0.0001f, -1.0f, 1.0f, "%.5f");
-            changed |= ImGui::ColorPicker3("Ambient", glm::value_ptr(state.DirectionalLight.Ambient));
-            changed |= ImGui::ColorPicker3("Diffuse", glm::value_ptr(state.DirectionalLight.Diffuse));
-            changed |= ImGui::ColorPicker3("Specular", glm::value_ptr(state.DirectionalLight.Specular));
+            changed |= ImGui::ColorPicker3("Color", glm::value_ptr(state.DirectionalLight.Color));
 
             if (changed) {
-                bpr->setDirectionalLight(state.DirectionalLight);
+                pbr->setDirectionalLight(state.DirectionalLight);
             }
         }
         ImGui::PopID();
@@ -35,18 +26,16 @@ namespace Ignis {
         ImGui::SeparatorText("Point Lights");
         ImGui::PushID("Add Point Lights");
         {
-            static BPR::PointLight add_light{};
+            static PBR::PointLight add_light{};
 
             ImGui::DragFloat3("Position", glm::value_ptr(add_light.Position), 0.01f);
             ImGui::DragFloat("Constant", &add_light.Constant, 0.01f, 0.0f);
             ImGui::DragFloat("Linear", &add_light.Linear, 0.01f, 0.0f);
             ImGui::DragFloat("Quadratic", &add_light.Quadratic, 0.01f, 0.0f);
-            ImGui::ColorPicker3("Ambient", glm::value_ptr(add_light.Ambient));
-            ImGui::ColorPicker3("Diffuse", glm::value_ptr(add_light.Diffuse));
-            ImGui::ColorPicker3("Specular", glm::value_ptr(add_light.Specular));
+            ImGui::ColorPicker3("Color", glm::value_ptr(add_light.Color));
 
             if (ImGui::Button("Add Point Light")) {
-                const auto point_light = state.PointLights.emplace_back(bpr->addPointLight(add_light));
+                const auto point_light = state.PointLights.emplace_back(pbr->addPointLight(add_light));
 
                 state.PointLightValues[point_light] = add_light;
             }
@@ -60,7 +49,7 @@ namespace Ignis {
 
             auto &light = state.PointLightValues[point_light];
 
-            ImGui::Text("Point Light: %u", point_light);
+            ImGui::Text("Point Light: %u", point_light.ID);
 
             if (ImGui::Button("Remove")) {
                 point_lights_to_remove.push_back(point_light);
@@ -70,19 +59,17 @@ namespace Ignis {
             changed |= ImGui::DragFloat("Constant", &light.Constant, 0.01f, 0.0f);
             changed |= ImGui::DragFloat("Linear", &light.Linear, 0.01f, 0.0f);
             changed |= ImGui::DragFloat("Quadratic", &light.Quadratic, 0.01f, 0.0f);
-            changed |= ImGui::ColorPicker3("Ambient", glm::value_ptr(light.Ambient));
-            changed |= ImGui::ColorPicker3("Diffuse", glm::value_ptr(light.Diffuse));
-            changed |= ImGui::ColorPicker3("Specular", glm::value_ptr(light.Specular));
+            changed |= ImGui::ColorPicker3("Color", glm::value_ptr(light.Color));
 
             if (changed)
-                bpr->setPointLight(point_light, light);
+                pbr->setPointLight(point_light, light);
             ImGui::PopID();
         }
         ImGui::Separator();
         ImGui::SeparatorText("Spot Lights");
         ImGui::PushID("Add Spot Lights");
         {
-            static BPR::SpotLight add_light{};
+            static PBR::SpotLight add_light{};
 
             ImGui::DragFloat3("Position", glm::value_ptr(add_light.Position), 0.01f);
             ImGui::DragFloat3("Direction", glm::value_ptr(add_light.Direction), 0.01f);
@@ -91,12 +78,10 @@ namespace Ignis {
             ImGui::DragFloat("Constant", &add_light.Constant, 0.01f, 0.0f);
             ImGui::DragFloat("Linear", &add_light.Linear, 0.01f, 0.0f);
             ImGui::DragFloat("Quadratic", &add_light.Quadratic, 0.01f, 0.0f);
-            ImGui::ColorPicker3("Ambient", glm::value_ptr(add_light.Ambient));
-            ImGui::ColorPicker3("Diffuse", glm::value_ptr(add_light.Diffuse));
-            ImGui::ColorPicker3("Specular", glm::value_ptr(add_light.Specular));
+            ImGui::ColorPicker3("Color", glm::value_ptr(add_light.Color));
 
             if (ImGui::Button("Add Spot Light")) {
-                const auto point_light = state.SpotLights.emplace_back(bpr->addSpotLight(add_light));
+                const auto point_light = state.SpotLights.emplace_back(pbr->addSpotLight(add_light));
 
                 state.SpotLightValues[point_light] = add_light;
             }
@@ -123,12 +108,10 @@ namespace Ignis {
             changed |= ImGui::DragFloat("Constant", &light.Constant, 0.01f, 0.0f);
             changed |= ImGui::DragFloat("Linear", &light.Linear, 0.01f, 0.0f);
             changed |= ImGui::DragFloat("Quadratic", &light.Quadratic, 0.01f, 0.0f);
-            changed |= ImGui::ColorPicker3("Ambient", glm::value_ptr(light.Ambient));
-            changed |= ImGui::ColorPicker3("Diffuse", glm::value_ptr(light.Diffuse));
-            changed |= ImGui::ColorPicker3("Specular", glm::value_ptr(light.Specular));
+            changed |= ImGui::ColorPicker3("Color", glm::value_ptr(light.Color));
 
             if (changed)
-                bpr->setSpotLight(spot_light, light);
+                pbr->setSpotLight(spot_light, light);
             ImGui::PopID();
         }
         ImGui::Separator();
@@ -156,7 +139,7 @@ namespace Ignis {
         }
     }
 
-    void Editor::RenderStaticModelPanel(StaticModelPanelState &state, BPR *bpr) {
+    void Editor::RenderStaticModelPanel(StaticModelPanelState &state, PBR *pbr) {
         ImGui::SeparatorText("Load Static Model");
         static char static_model_path[1024];
         ImGui::InputText("path", static_model_path, 1024);
@@ -164,7 +147,7 @@ namespace Ignis {
         if (ImGui::Button("Load Static Model")) {
             if (const std::string_view path = static_model_path;
                 std::filesystem::exists(path)) {
-                if (const auto model = bpr->loadStaticModel(path);
+                if (const auto model = pbr->addStaticModel(path);
                     !state.StaticModelUIStates.contains(model)) {
                     state.StaticModelUIStates[model] = AddUIState{};
                     state.StaticInstances[model].clear();
@@ -175,15 +158,15 @@ namespace Ignis {
             }
         }
 
-        gtl::flat_hash_map<BPR::StaticModelID, std::vector<BPR::StaticInstanceID>> instances_to_remove{};
+        gtl::flat_hash_map<PBR::StaticModelID, std::vector<PBR::StaticInstanceID>> instances_to_remove{};
 
-        std::vector<BPR::StaticModelID> models_to_remove{};
+        std::vector<PBR::StaticModelID> models_to_remove{};
 
         ImGui::SeparatorText("Loaded Static Models");
         for (uint32_t model_index = 0; model_index < state.StaticModels.size(); model_index++) {
             const auto &model = state.StaticModels[model_index];
             ImGui::PushID(model_index);
-            ImGui::Text("Path: %s", bpr->getStaticModelConstRef(model).Path.c_str());
+            ImGui::Text("Path: %s", pbr->getStaticModelPath(model).data());
 
             {
                 ImGui::SeparatorText("Add Static Instance");
@@ -202,7 +185,7 @@ namespace Ignis {
 
                     const glm::mat4x4 final = translated * rotated * scaled;
 
-                    state.StaticInstances[model].push_back(bpr->addStaticInstance(model, {final, glm::mat4x4{1.0f}}));
+                    state.StaticInstances[model].push_back(pbr->addStaticInstance(model, final));
                     state.StaticInstanceUIStates[state.StaticInstances[model].back()] = InstanceUIState{
                         add_position,
                         add_rotation,
@@ -230,7 +213,7 @@ namespace Ignis {
                 const glm::mat4x4 model_transform = translated * rotated * scaled;
 
                 if (changed)
-                    bpr->setStaticInstance(state.StaticInstances[model][instance_index], {model_transform, glm::mat4x4{1.0f}});
+                    pbr->setStaticInstance(state.StaticInstances[model][instance_index], model_transform);
 
                 if (ImGui::Button("Remove Instance")) {
                     instances_to_remove[model].push_back(state.StaticInstances[model][instance_index]);
@@ -252,7 +235,7 @@ namespace Ignis {
             while (!instances.empty()) {
                 const auto instance = instances.back();
                 instances.pop_back();
-                bpr->removeStaticInstance(instance);
+                pbr->removeStaticInstance(instance);
                 state.StaticInstanceUIStates.erase(instance);
 
                 if (const auto it = std::ranges::find(state.StaticInstances[model], instance);
@@ -264,7 +247,7 @@ namespace Ignis {
         while (!models_to_remove.empty()) {
             const auto model = models_to_remove.back();
             models_to_remove.pop_back();
-            bpr->unloadStaticModel(model);
+            pbr->removeStaticModel(model);
             state.StaticInstances.erase(model);
             state.StaticModelUIStates.erase(model);
 
@@ -289,9 +272,10 @@ namespace Ignis {
 
         createViewportImage(engine.getUISystem<ImGuiSystem>(), 1, 1, frame_graph);
 
-        m_pBPR = std::make_unique<BPR>(BPR::Settings{
-            m_ViewportImage.Format,
-            m_DepthImage.Format,
+        m_pPBR = std::make_unique<PBR>(PBR::Settings{
+            frame_graph,
+            m_ViewportImageID,
+            m_DepthImageID,
         });
 
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor attached");
@@ -304,7 +288,7 @@ namespace Ignis {
 
         FrameGraph &frame_graph = engine.getFrameGraph();
 
-        m_pBPR = nullptr;
+        m_pPBR = nullptr;
 
         destroyViewportImage(engine.getUISystem<ImGuiSystem>(), frame_graph);
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor detached");
@@ -330,14 +314,14 @@ namespace Ignis {
         const auto height = static_cast<float>(m_ViewportImage.Extent.height);
         const auto aspect = width / height;
 
-        m_pBPR->updateCamera({m_Camera.getProjection(aspect), m_Camera.getView()});
+        m_pPBR->setCamera({m_Camera.getProjection(aspect) * m_Camera.getView(), m_Camera.getPosition()});
     }
 
     void Editor::onGUI(IGUISystem *ui_system) {
         const auto im_gui = dynamic_cast<ImGuiSystem *>(ui_system);
 
         ImGui::Begin("Ignis::EditorLayer::LightState");
-        RenderLightPanel(m_LightPanelState, m_pBPR.get());
+        RenderLightPanel(m_LightPanelState, m_pPBR.get());
         ImGui::End();
 
         ImGui::Begin("Ignis::EditorLayer::Toolbox");
@@ -347,7 +331,7 @@ namespace Ignis {
             ImGui_ImplGlfw_RestoreCallbacks(Window::GetHandle());
         }
 
-        RenderStaticModelPanel(m_StaticModelPanelState, m_pBPR.get());
+        RenderStaticModelPanel(m_StaticModelPanelState, m_pPBR.get());
 
         ImGui::End();
 
@@ -364,6 +348,7 @@ namespace Ignis {
             auto &frame_graph = Engine::GetRef().getFrameGraph();
             destroyViewportImage(im_gui, frame_graph);
             createViewportImage(im_gui, static_cast<uint32_t>(viewport_size.x), static_cast<uint32_t>(viewport_size.y), frame_graph);
+            m_pPBR->onResize(m_ViewportImageID, m_DepthImageID);
         }
 
         ImGui::Image(static_cast<const VkDescriptorSet &>(m_ViewportDescriptor), viewport_size);
@@ -371,32 +356,8 @@ namespace Ignis {
         ImGui::End();
     }
 
-    void Editor::onRender(FrameGraph &frame_graph) {
-        FrameGraph::RenderPass editor_pass{
-            "Ignis::EditorLayer::RenderPass",
-            {0.0f, 1.0f, 0.0f, 1.0f},
-        };
-
-        m_pBPR->onRenderPass(editor_pass);
-
-        editor_pass
-            .setColorAttachments({FrameGraph::Attachment{
-                m_ViewportImageID,
-                vk::ClearColorValue{0.0f, 0.0f, 0.0f, 1.0f},
-                vk::AttachmentLoadOp::eClear,
-                vk::AttachmentStoreOp::eStore,
-            }})
-            .setDepthAttachment(FrameGraph::Attachment{
-                m_DepthImageID,
-                vk::ClearDepthStencilValue{1.0},
-                vk::AttachmentLoadOp::eClear,
-                vk::AttachmentStoreOp::eStore,
-            })
-            .setExecute([this](const vk::CommandBuffer command_buffer) {
-                m_pBPR->onDraw(command_buffer);
-            });
-
-        frame_graph.addRenderPass(editor_pass);
+    void Editor::onRender(FrameGraph &) {
+        m_pPBR->onRender();
     }
 
     void Editor::createViewportImage(
