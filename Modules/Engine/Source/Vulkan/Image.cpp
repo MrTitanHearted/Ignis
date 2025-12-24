@@ -11,6 +11,51 @@ namespace Ignis {
         s_pInstance->m_Device.destroyImageView(view);
     }
 
+    Vulkan::Image Vulkan::AllocateImageCube(
+        const vma::AllocationCreateFlags allocation_flags,
+        const vma::MemoryUsage           memory_usage,
+        const vk::ImageCreateFlagBits    image_flags,
+        const vk::Format                 format,
+        const vk::ImageUsageFlags        usage_flags,
+        const vk::Extent2D              &extent) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        vk::ImageCreateInfo image_create_info{};
+        image_create_info
+            .setFlags(image_flags | vk::ImageCreateFlagBits::eCubeCompatible)
+            .setImageType(vk::ImageType::e2D)
+            .setFormat(format)
+            .setExtent(vk::Extent3D{extent, 1})
+            .setArrayLayers(6)
+            .setMipLevels(1)
+            .setSamples(vk::SampleCountFlagBits::e1)
+            .setInitialLayout(vk::ImageLayout::eUndefined)
+            .setTiling(vk::ImageTiling::eOptimal)
+            .setUsage(usage_flags);
+        vma::AllocationCreateInfo create_info{};
+        create_info
+            .setFlags(allocation_flags)
+            .setUsage(memory_usage);
+
+        const auto [result, image_allocation] =
+            s_pInstance->m_VmaAllocator.createImage(image_create_info, create_info);
+        DIGNIS_VK_CHECK(result);
+        const auto [handle, allocation] = image_allocation;
+
+        Image image{};
+        image.Handle     = handle;
+        image.Format     = format;
+        image.Extent     = vk::Extent3D{extent, 1};
+        image.Allocation = allocation;
+        image.Usage      = usage_flags;
+
+        image.CreateFlags = image_flags;
+        image.MemoryUsage = memory_usage;
+
+        image.AllocationFlags = allocation_flags;
+
+        return image;
+    }
+
     Vulkan::Image Vulkan::AllocateImage3D(
         const vma::AllocationCreateFlags allocation_flags,
         const vma::MemoryUsage           memory_usage,
@@ -99,6 +144,44 @@ namespace Ignis {
         image.AllocationFlags = allocation_flags;
 
         return image;
+    }
+
+    vk::ImageView Vulkan::CreateImageColorViewCube(const vk::Image image, const vk::Format format) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        vk::ImageViewCreateInfo create_info{};
+        create_info
+            .setViewType(vk::ImageViewType::eCube)
+            .setFormat(format)
+            .setImage(image)
+            .setSubresourceRange(
+                vk::ImageSubresourceRange{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                    .setBaseArrayLayer(0)
+                    .setBaseMipLevel(0)
+                    .setLayerCount(6)
+                    .setLevelCount(1));
+        auto [result, view] = s_pInstance->m_Device.createImageView(create_info);
+        DIGNIS_VK_CHECK(result);
+        return view;
+    }
+
+    vk::ImageView Vulkan::CreateImageDepthViewCube(const vk::Image image, const vk::Format format) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        vk::ImageViewCreateInfo create_info{};
+        create_info
+            .setViewType(vk::ImageViewType::eCube)
+            .setFormat(format)
+            .setImage(image)
+            .setSubresourceRange(
+                vk::ImageSubresourceRange{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eDepth)
+                    .setBaseArrayLayer(0)
+                    .setBaseMipLevel(0)
+                    .setLayerCount(6)
+                    .setLevelCount(1));
+        auto [result, view] = s_pInstance->m_Device.createImageView(create_info);
+        DIGNIS_VK_CHECK(result);
+        return view;
     }
 
     vk::ImageView Vulkan::CreateImageColorView3D(const vk::Image image, const vk::Format format) {

@@ -276,6 +276,14 @@ namespace Ignis {
             frame_graph,
             m_ViewportImageID,
             m_DepthImageID,
+            {
+                "Assets/Cubemaps/sky_34_cubemap_2k/px.png",
+                "Assets/Cubemaps/sky_34_cubemap_2k/nx.png",
+                "Assets/Cubemaps/sky_34_cubemap_2k/py.png",
+                "Assets/Cubemaps/sky_34_cubemap_2k/ny.png",
+                "Assets/Cubemaps/sky_34_cubemap_2k/pz.png",
+                "Assets/Cubemaps/sky_34_cubemap_2k/nz.png",
+            }
         });
 
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor attached");
@@ -314,7 +322,7 @@ namespace Ignis {
         const auto height = static_cast<float>(m_ViewportImage.Extent.height);
         const auto aspect = width / height;
 
-        m_pPBR->setCamera({m_Camera.getProjection(aspect) * m_Camera.getView(), m_Camera.getPosition()});
+        m_pPBR->setCamera({m_Camera.getProjection(aspect), m_Camera.getView(), m_Camera.getPosition()});
     }
 
     void Editor::onGUI(IGUISystem *ui_system) {

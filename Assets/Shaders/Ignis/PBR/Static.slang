@@ -8,7 +8,9 @@ struct Vertex {
     [[vk::location(2)]]
     float2 UV;
     [[vk::location(3)]]
-    float4 Tangent;
+    float3 Tangent;
+    [[vk::location(4)]]
+    float3 Bitangent;
 };
 
 struct VertexOutput {
@@ -22,7 +24,7 @@ struct VertexOutput {
     [[vk::location(3)]]
     float3 Tangent;
     [[vk::location(4)]]
-    float Bitangent;
+    float3 Bitangent;
     [[vk::location(5)]]
     uint Material;
 };
@@ -46,14 +48,16 @@ struct Material {
 
 struct DirectionalLight {
     float3 Direction;
+    float  _ignis_padding0;
     float3 Color;
+    float  _ignis_padding1;
 };
 
 struct PointLight {
     float3 Position;
-    float Constant;
+    float  Constant;
     float3 Color;
-    float Linear;
+    float  Linear;
 
     float Quadratic;
 
@@ -62,11 +66,11 @@ struct PointLight {
 
 struct SpotLight {
     float3 Position;
-    float Constant;
+    float  Constant;
     float3 Direction;
-    float Linear;
+    float  Linear;
     float3 Color;
-    float Quadratic;
+    float  Quadratic;
 
     float CutOff;
     float OuterCutOff;
@@ -96,6 +100,8 @@ struct Instance {
 Sampler2D gTextures[];
 [[vk::binding(1, 0)]]
 StructuredBuffer<Material> gMaterials;
+[[vk::binding(2, 0)]]
+SamplerCube gSkyboxTexture;
 
 [[vk::binding(0, 1)]]
 ConstantBuffer<DirectionalLight> gDirectionLight;
@@ -146,8 +152,8 @@ VertexOutput vs_main(
     output.Normal = mul(normal, input.Normal);
     output.UV     = input.UV;
 
-    output.Tangent   = mul(normal, input.Tangent.xyz);
-    output.Bitangent = input.Tangent.w;
+    output.Tangent   = mul(normal, input.Tangent);
+    output.Bitangent = mul(normal, input.Bitangent);
 
     output.Material = mesh.Material;
 
@@ -165,18 +171,23 @@ float4 fs_main(FragmentInput input) : SV_Target {
     float material_roughness = material.RoughnessFactor;
 
     if (k_InvalidTexture != material.AlbedoTexture) {
-        material_albedo *= gTextures[material.AlbedoTexture].Sample(input.UV).rgb;
+        material_albedo *= pow(gTextures[material.AlbedoTexture].Sample(input.UV).rgb, 2.2f);
     }
     if (k_InvalidTexture != material.NormalTexture) {
-        float3 n = material_normal;
-        float3 t = normalize(input.Tangent);
-        float3 b = cross(n, t) * input.Bitangent;
+        float3 tangent_normal = gTextures[material.NormalTexture].Sample(input.UV).rgb * 2.0f - 1.0f;
+
+        float3 q1  = ddx(input.FragmentPosition);
+        float3 q2  = ddy(input.FragmentPosition);
+        float2 st1 = ddx(input.UV);
+        float2 st2 = ddy(input.UV);
+
+        float3 n = normalize(input.Normal);
+        float3 t = normalize(q1 * st2.g - q2 * st1.g);
+        float3 b = -normalize(cross(n, t));
 
         float3x3 tbn = float3x3(t, b, n);
 
-        material_normal = gTextures[material.NormalTexture].Sample(input.UV).rgb;
-
-        material_normal = normalize(mul(tbn, material_normal * 2.0f - 1.0f));
+        material_normal = normalize(mul(tbn, tangent_normal));
     }
     if (k_InvalidTexture != material.MetallicRoughnessTexture) {
         float2 material_metallic_roughness = gTextures[material.MetallicRoughnessTexture].Sample(input.UV).gb;
@@ -185,7 +196,82 @@ float4 fs_main(FragmentInput input) : SV_Target {
         material_roughness *= material_metallic_roughness.r;
     }
 
-    // return float4(material_albedo, 1.0f);
-    return float4(material_normal * 0.5f + 0.5f, 1.0f);
+    float3 result = float3(0.0f);
+
+    if (true) {
+        float3 I = normalize(input.FragmentPosition - gDrawPC.ViewPosition);
+        float3 R = reflect(I, material_normal);
+
+        result = gSkyboxTexture.Sample(R).rgb;
+    }
+
+    if (false) {
+        float ratio = 1.0f / 1.52f;
+
+        float3 I = normalize(input.FragmentPosition - gDrawPC.ViewPosition);
+        float3 R = refract(I, material_normal, ratio);
+
+        result = gSkyboxTexture.Sample(R).rgb;
+    }
+
+    return float4(result, 1.0f);
+}
+
+float3 EvaluateBRDF(
+    float  d,
+    float3 f,
+    float  g,
+    float  n_dot_v,
+    float  n_dot_l,
+    float3 radiance,
+    float3 albedo,
+    float  metallic) {
+    n_dot_v = max(n_dot_v, 0.000001f);
+    n_dot_l = max(n_dot_l, 0.000001f);
+
+    float3 specular = (d * f * g) / (4.0f * n_dot_v * n_dot_l);
+
+    float3 k_d = (1.0f - f) * (1.0f - metallic);
+
+    float3 diffuse = k_d * albedo / k_PI;
+
+    return (diffuse + specular) * radiance * n_dot_l;
+}
+
+float CalculateDistributionGGX(float n_dot_h, float roughness) {
+    float a  = roughness * roughness;
+    float a2 = a * a;
+
+    float n_dot_h2 = n_dot_h * n_dot_h;
+
+    float denominator = (n_dot_h2 * (a2 - 1.0f) + 1.0f);
+
+    denominator = k_PI * denominator * denominator;
+
+    return a2 / denominator;
+}
+
+float3 CalculateFresnelSchlick(float cos_theta, float3 f0) {
+    return f0 + (1.0f - f0) * pow(clamp(1.0f - cos_theta, 0.0f, 1.0f), 5.0f);
+}
+
+float3 CalculateF0Metallic(float3 albedo, float metallic) {
+    return lerp(float3(0.04f), albedo, metallic);
+}
+
+float CalculateGeometrySmith(float n_dot_v, float n_dot_l, float roughness) {
+    float ggx1 = CalculateGeometrySchlickGGX(n_dot_l, roughness);
+    float ggx2 = CalculateGeometrySchlickGGX(n_dot_v, roughness);
+
+    return ggx1 * ggx2;
+}
+
+float CalculateGeometrySchlickGGX(float n_dot_v, float roughness) {
+    float r = roughness + 1.0f;
+    float k = (r * r) / 8.0f;
+
+    float denominator = n_dot_v * (1.0f - k) + k;
+
+    return n_dot_v / denominator;
 }
 

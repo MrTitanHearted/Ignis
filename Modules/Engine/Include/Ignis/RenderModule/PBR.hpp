@@ -70,14 +70,16 @@ namespace Ignis {
 
         struct DirectionalLight {
             glm::vec3 Direction{0.0f, -1.0f, 0.0f};
-            glm::vec3 Color{1.0f};
+            float     _ignis_padding0{};
+            glm::vec3 Color{0.0f};
+            float     _ignis_padding1{};
         };
 
         struct PointLight {
             glm::vec3 Position{0.0f};
-            float Constant{0.0f};
-            glm::vec3 Color{1.0f};
-            float Linear{0.0f};
+            float     Constant{0.0f};
+            glm::vec3 Color{0.0f};
+            float     Linear{0.0f};
 
             float Quadratic{1.0f};
             float _ignis_padding[3]{};
@@ -85,11 +87,11 @@ namespace Ignis {
 
         struct SpotLight {
             glm::vec3 Position{0.0f};
-            float Constant{0.0f};
+            float     Constant{0.0f};
             glm::vec3 Direction{0.0f, 0.0f, 1.0f};
-            float Linear{0.0f};
-            glm::vec3 Color{1.0f};
-            float Quadratic{1.0f};
+            float     Linear{0.0f};
+            glm::vec3 Color{0.0f};
+            float     Quadratic{1.0f};
 
             float CutOff{glm::radians(12.5f)};
             float OuterCutOff{glm::radians(15.0f)};
@@ -120,10 +122,18 @@ namespace Ignis {
             glm::vec3 Position{0.0f};
             glm::vec3 Normal{0.0f};
             glm::vec2 UV{0.0f};
-            glm::vec4 Tangent{0.0f};
+            glm::vec3 Tangent{0.0f};
+            glm::vec3 Bitangent{0.0f};
         };
 
         struct Camera {
+            glm::mat4x4 Projection;
+            glm::mat4x4 View;
+
+            glm::vec3 Position;
+        };
+
+        struct CameraPC {
             glm::mat4x4 ProjectionView;
 
             glm::vec3 Position;
@@ -154,6 +164,8 @@ namespace Ignis {
             FrameGraph::ImageID ViewportImage{FrameGraph::k_InvalidImageID};
             FrameGraph::ImageID DepthImage{FrameGraph::k_InvalidImageID};
 
+            std::array<std::filesystem::path, 6> SkyboxFacePaths;
+
             uint32_t MaxBindingCount{2 << 20};
 
             Settings(
@@ -162,10 +174,13 @@ namespace Ignis {
                 const FrameGraph::ImageID viewport_image,
                 const FrameGraph::ImageID depth_image,
 
+                const std::array<std::filesystem::path, 6> &skybox_face_paths,
+
                 const uint32_t max_binding_count = 2 << 20)
                 : FrameGraph{frame_graph},
                   ViewportImage{viewport_image},
                   DepthImage{depth_image},
+                  SkyboxFacePaths{skybox_face_paths},
                   MaxBindingCount{max_binding_count} {}
         };
 
@@ -271,7 +286,15 @@ namespace Ignis {
             aiTextureType ai_texture_type);
 
 #pragma endregion
+#pragma region Skybox
+        void initSkybox(const std::array<std::filesystem::path, 6> &skybox_face_paths);
+        void releaseSkybox();
 
+        void readSkyboxImage(FrameGraph::RenderPass &render_pass) const;
+        void readSkyboxBuffers(FrameGraph::RenderPass &render_pass) const;
+
+        void onSkyboxDraw(vk::CommandBuffer command_buffer);
+#pragma endregion
        private:
         FrameGraph &m_FrameGraph;
 
@@ -383,6 +406,24 @@ namespace Ignis {
         SparseVector<StaticModelID, FrameGraph::BufferInfo> m_FrameGraphStaticModelIndirectBuffers;
 
         gtl::flat_hash_map<std::string, StaticModelID> m_LoadedStaticModels;
+#pragma endregion
+#pragma region Skybox
+        vk::DescriptorSetLayout m_SkyboxDescriptorLayout;
+        vk::DescriptorSet       m_SkyboxDescriptorSet;
+
+        vk::PipelineLayout m_SkyboxPipelineLayout;
+        vk::Pipeline       m_SkyboxPipeline;
+
+        Vulkan::Buffer m_SkyboxVertexBuffer;
+        Vulkan::Buffer m_SkyboxIndexBuffer;
+
+        Vulkan::Image m_SkyboxImage;
+        vk::ImageView m_SkyboxImageView;
+
+        FrameGraph::ImageID m_FrameGraphSkyboxImage;
+
+        FrameGraph::BufferInfo m_FrameGraphSkyboxVertexBuffer;
+        FrameGraph::BufferInfo m_FrameGraphSkyboxIndexBuffer;
 #pragma endregion
     };
 }  // namespace Ignis

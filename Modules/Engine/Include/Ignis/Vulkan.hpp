@@ -483,6 +483,14 @@ namespace Ignis {
             const vk::Extent2D &dst_extent,
             vk::CommandBuffer   command_buffer);
 
+        static void CopyBufferToImageCube(
+            vk::Buffer          src_buffer,
+            vk::Image           dst_image,
+            uint64_t            src_offset,
+            uint32_t            dst_face_size,
+            const vk::Extent2D &dst_extent,
+            vk::CommandBuffer   command_buffer);
+
         static vk::CommandBufferSubmitInfo GetCommandBufferSubmitInfo(vk::CommandBuffer command_buffer);
 
 #pragma endregion
@@ -517,6 +525,14 @@ namespace Ignis {
         static void DestroyImage(const Image &image);
         static void DestroyImageView(vk::ImageView view);
 
+        static Image AllocateImageCube(
+            vma::AllocationCreateFlags allocation_flags,
+            vma::MemoryUsage           memory_usage,
+            vk::ImageCreateFlagBits    image_flags,
+            vk::Format                 format,
+            vk::ImageUsageFlags        usage_flags,
+            const vk::Extent2D        &extent);
+
         static Image AllocateImage3D(
             vma::AllocationCreateFlags allocation_flags,
             vma::MemoryUsage           memory_usage,
@@ -532,6 +548,9 @@ namespace Ignis {
             vk::Format                 format,
             vk::ImageUsageFlags        usage_flags,
             const vk::Extent2D        &extent);
+
+        static vk::ImageView CreateImageColorViewCube(vk::Image image, vk::Format format);
+        static vk::ImageView CreateImageDepthViewCube(vk::Image image, vk::Format format);
 
         static vk::ImageView CreateImageColorView3D(vk::Image image, vk::Format format);
         static vk::ImageView CreateImageDepthView3D(vk::Image image, vk::Format format);

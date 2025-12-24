@@ -19,16 +19,20 @@ namespace Ignis {
                 vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, settings.MaxBindingCount},
             });
 
-        m_Sampler = Vulkan::CreateSampler(vk::SamplerCreateInfo());
+        m_Sampler = Vulkan::CreateSampler(
+            vk::SamplerCreateInfo()
+                .setMaxAnisotropy(16.0f));
 
-        m_Camera = Camera{glm::mat4x4{1.0f}, glm::vec3{0.0f}};
+        m_Camera = Camera{glm::mat4x4{1.0f}, glm::mat4x4{1.0f}, glm::vec3{0.0f}};
 
+        initSkybox(settings.SkyboxFacePaths);
         initMaterials(settings.MaxBindingCount);
         initLights();
         initStatic(settings.MaxBindingCount);
     }
 
     PBR::~PBR() {
+        releaseSkybox();
         releaseStatic();
         releaseLights();
         releaseMaterials();
@@ -77,5 +81,32 @@ namespace Ignis {
         readStaticBuffers(static_render_pass);
 
         m_FrameGraph.addRenderPass(static_render_pass);
+
+        FrameGraph::RenderPass skybox_render_pass{
+            "Ignis::PBR::Skybox::RenderPass",
+            {1.0f, 1.0f, 0.0f, 1.0f},
+        };
+
+        skybox_render_pass
+            .setColorAttachments(FrameGraph::Attachment{
+                m_FrameGraphViewportImage,
+                vk::ClearColorValue{0.0f, 0.0f, 0.0f, 1.0f},
+                vk::AttachmentLoadOp::eLoad,
+                vk::AttachmentStoreOp::eStore,
+            })
+            .setDepthAttachment(FrameGraph::Attachment{
+                m_FrameGraphDepthImage,
+                vk::ClearDepthStencilValue{1.0f},
+                vk::AttachmentLoadOp::eLoad,
+                vk::AttachmentStoreOp::eStore,
+            })
+            .setExecute([this](const vk::CommandBuffer command_buffer) {
+                onSkyboxDraw(command_buffer);
+            });
+
+        readSkyboxImage(skybox_render_pass);
+        readSkyboxBuffers(skybox_render_pass);
+
+        m_FrameGraph.addRenderPass(skybox_render_pass);
     }
 }  // namespace Ignis

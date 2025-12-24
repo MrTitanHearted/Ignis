@@ -457,7 +457,7 @@ namespace Ignis {
         m_StaticPipelineLayout = Vulkan::CreatePipelineLayout(
             vk::PushConstantRange{
                 vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                0, sizeof(Camera) + sizeof(StaticModelID)},
+                0, sizeof(CameraPC) + sizeof(StaticModelID)},
             {m_MaterialDescriptorLayout, m_LightDescriptorLayout, m_StaticDescriptorLayout});
 
         m_StaticDescriptorSet = Vulkan::AllocateDescriptorSet(m_StaticDescriptorLayout, m_DescriptorPool);
@@ -474,7 +474,8 @@ namespace Ignis {
                         vk::VertexInputAttributeDescription{0, 0, vk::Format::eR32G32B32Sfloat, offsetof(StaticVertex, Position)},
                         vk::VertexInputAttributeDescription{1, 0, vk::Format::eR32G32B32Sfloat, offsetof(StaticVertex, Normal)},
                         vk::VertexInputAttributeDescription{2, 0, vk::Format::eR32G32Sfloat, offsetof(StaticVertex, UV)},
-                        vk::VertexInputAttributeDescription{3, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(StaticVertex, Tangent)},
+                        vk::VertexInputAttributeDescription{3, 0, vk::Format::eR32G32B32Sfloat, offsetof(StaticVertex, Tangent)},
+                        vk::VertexInputAttributeDescription{4, 0, vk::Format::eR32G32B32Sfloat, offsetof(StaticVertex, Tangent)},
                     },
                 }})
                 .setInputTopology(vk::PrimitiveTopology::eTriangleList)
@@ -519,6 +520,11 @@ namespace Ignis {
     }
 
     void PBR::onStaticDraw(const vk::CommandBuffer command_buffer) {
+        const CameraPC camera_pc{
+            m_Camera.Projection * m_Camera.View,
+            m_Camera.Position,
+        };
+
         command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_StaticPipeline);
         command_buffer.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
@@ -529,8 +535,8 @@ namespace Ignis {
             m_StaticPipelineLayout,
             vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             0,
-            sizeof(Camera),
-            &m_Camera);
+            sizeof(CameraPC),
+            &camera_pc);
 
         for (const auto &[model_id, model] : m_StaticModels) {
             if (0 == model.InstanceCount)
@@ -538,7 +544,7 @@ namespace Ignis {
             command_buffer.pushConstants(
                 m_StaticPipelineLayout,
                 vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                sizeof(Camera),
+                sizeof(CameraPC),
                 sizeof(StaticModelID),
                 &model_id);
             command_buffer.bindIndexBuffer(model.IndexBuffer.Handle, 0, vk::IndexType::eUint32);
@@ -607,12 +613,11 @@ namespace Ignis {
             const auto &tangent   = AssimpToGlm(ai_mesh->mTangents[i]);
             const auto &bitangent = AssimpToGlm(ai_mesh->mBitangents[i]);
 
-            const float handedness = glm::dot(glm::cross(normal, tangent), bitangent) < 0.0f ? -1.0f : 1.0f;
-
-            vertex.Position = position;
-            vertex.Normal   = normal;
-            vertex.UV       = uv;
-            vertex.Tangent  = glm::vec4(tangent, handedness);
+            vertex.Position  = position;
+            vertex.Normal    = normal;
+            vertex.UV        = uv;
+            vertex.Tangent   = tangent;
+            vertex.Bitangent = bitangent;
 
             vertices.push_back(vertex);
         }

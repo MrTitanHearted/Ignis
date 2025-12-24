@@ -301,6 +301,42 @@ namespace Ignis {
         command_buffer.copyImageToBuffer2(copy_info);
     }
 
+    void Vulkan::CopyBufferToImageCube(
+        const vk::Buffer        src_buffer,
+        const vk::Image         dst_image,
+        const uint64_t          src_offset,
+        const uint32_t          dst_face_size,
+        const vk::Extent2D     &dst_extent,
+        const vk::CommandBuffer command_buffer) {
+        std::array<vk::BufferImageCopy2, 6> regions{};
+
+        for (uint32_t i = 0; i < 6; i++) {
+            vk::BufferImageCopy2 &region = regions[i];
+
+            region
+                .setBufferOffset(src_offset + dst_face_size * i)
+                .setImageOffset(vk::Offset3D{0, 0, 0})
+                .setBufferRowLength(0)
+                .setBufferImageHeight(0)
+                .setImageExtent(vk::Extent3D{dst_extent, 1})
+                .setImageSubresource(
+                    vk::ImageSubresourceLayers{}
+                        .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                        .setBaseArrayLayer(i)
+                        .setLayerCount(1)
+                        .setMipLevel(0));
+        }
+
+        vk::CopyBufferToImageInfo2 copy_info{};
+        copy_info
+            .setSrcBuffer(src_buffer)
+            .setDstImage(dst_image)
+            .setDstImageLayout(vk::ImageLayout::eTransferDstOptimal)
+            .setRegions(regions);
+
+        command_buffer.copyBufferToImage2(copy_info);
+    }
+
     vk::CommandBufferSubmitInfo Vulkan::GetCommandBufferSubmitInfo(const vk::CommandBuffer command_buffer) {
         return vk::CommandBufferSubmitInfo{command_buffer};
     }
