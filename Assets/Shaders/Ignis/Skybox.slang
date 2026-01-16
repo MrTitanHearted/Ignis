@@ -39,6 +39,8 @@ VertexOutput vs_main(
 
 [shader("fragment")]
 float4 fs_main(FragmentInput input) : SV_Target {
-    return gSkybox.Sample(input.UVW);
+    float3 color = gSkybox.Sample(input.UVW).rgb;
+
+    return float4(color, 1.0f);
 }
 

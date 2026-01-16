@@ -1,9 +1,6 @@
 #pragma once
 
 #include <Ignis/Engine.hpp>
-
-#include <Ignis/RenderModule.hpp>
-
 #include <Ignis/ImGuiSystem.hpp>
 
 namespace Ignis {
@@ -12,45 +9,44 @@ namespace Ignis {
         struct Settings {
         };
 
-        struct AddUIState {
-            glm::vec3 Position;
-            glm::vec3 Rotation;
-            float     Scale;
+        struct ModelUIState {
+            glm::vec3 Position{0.0f};
+            glm::vec3 Rotation{0.0f};
+            glm::f32  Scale{1.0f};
+
+            std::vector<Render::InstanceID> Instances{};
         };
 
         struct InstanceUIState {
-            glm::vec3 Position;
-            glm::vec3 Rotation;
+            glm::vec3 Position{0.0f};
+            glm::vec3 Rotation{0.0f};
+            glm::f32  Scale{1.0f};
 
-            float Scale;
-            bool  IsInitialized{false};
+            bool IsInitialized{false};
+        };
+
+        struct ModelPanelState {
+            std::vector<Render::ModelID> Models{};
+
+            gtl::flat_hash_map<Render::ModelID, ModelUIState>       ModelToUIState{};
+            gtl::flat_hash_map<Render::InstanceID, InstanceUIState> InstanceToUIState{};
         };
 
         struct LightPanelState {
-            PBR::DirectionalLight DirectionalLight;
+            Render::DirectionalLight DirectionalLight{};
 
-            std::vector<PBR::PointLightID> PointLights;
-            std::vector<PBR::SpotLightID>  SpotLights;
+            std::vector<Render::PointLightID> PointLights{};
+            std::vector<Render::SpotLightID>  SpotLights{};
 
-            gtl::flat_hash_map<PBR::PointLightID, PBR::PointLight> PointLightValues;
-            gtl::flat_hash_map<PBR::SpotLightID, PBR::SpotLight>   SpotLightValues;
-        };
-
-        struct StaticModelPanelState {
-            std::vector<PBR::StaticModelID> StaticModels;
-
-            gtl::flat_hash_map<PBR::StaticModelID, AddUIState> StaticModelUIStates;
-
-            gtl::flat_hash_map<PBR::StaticModelID, std::vector<PBR::StaticInstanceID>> StaticInstances;
-
-            gtl::flat_hash_map<PBR::StaticInstanceID, InstanceUIState> StaticInstanceUIStates;
+            gtl::flat_hash_map<Render::PointLightID, Render::PointLight> PointLightValues{};
+            gtl::flat_hash_map<Render::SpotLightID, Render::SpotLight>   SpotLightValues{};
         };
 
        public:
         static bool OnWindowClose(const WindowCloseEvent &);
 
-        static void RenderLightPanel(LightPanelState &state, PBR *pbr);
-        static void RenderStaticModelPanel(StaticModelPanelState &state, PBR *pbr);
+        static void RenderModelPanel(ModelPanelState &state);
+        static void RenderLightPanel(LightPanelState &state);
 
        public:
         explicit Editor(const Settings &settings);
@@ -84,14 +80,12 @@ namespace Ignis {
         Vulkan::Image m_DepthImage;
         vk::ImageView m_DepthView;
 
-        vk::DescriptorSet   m_ViewportDescriptor;
-        FrameGraph::ImageID m_ViewportImageID{FrameGraph::k_InvalidImageID};
+        vk::DescriptorSet m_ViewportDescriptor;
+
+        FrameGraph::ImageID m_ColorImageID{FrameGraph::k_InvalidImageID};
         FrameGraph::ImageID m_DepthImageID{FrameGraph::k_InvalidImageID};
 
-        std::unique_ptr<PBR> m_pPBR;
-
-        LightPanelState m_LightPanelState;
-
-        StaticModelPanelState m_StaticModelPanelState;
+        ModelPanelState m_ModelPanel;
+        LightPanelState m_LightPanel;
     };
 }  // namespace Ignis

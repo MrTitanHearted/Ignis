@@ -158,7 +158,7 @@
 
 namespace Ignis {
     template <typename... FormatArgs>
-    std::string formatStr(const std::string_view fmt, FormatArgs &&...args) {
+    std::string FormatString(const std::string_view fmt, FormatArgs &&...args) {
         return std::vformat(fmt, std::make_format_args(args...));
     }
 
@@ -209,7 +209,7 @@ namespace Ignis {
                     location, spdlog::level::critical,
                     "Assertion failed for: '{}' with message: '{}'",
                     conditionStr,
-                    formatStr(std::forward<Args>(args)...));
+                    FormatString(std::forward<Args>(args)...));
             } else {
                 m_EngineLogger->log(
                     location, spdlog::level::critical,

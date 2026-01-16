@@ -1,260 +1,9 @@
 #include <Ignis/Editor.hpp>
-#include <Ignis/ImGuiSystem.hpp>
 
 namespace Ignis {
     bool Editor::OnWindowClose(const WindowCloseEvent &) {
         Engine::GetRef().stop();
         return false;
-    }
-
-    void Editor::RenderLightPanel(LightPanelState &state, PBR *pbr) {
-        std::vector<PBR::PointLightID> point_lights_to_remove{};
-        std::vector<PBR::SpotLightID>  spot_lights_to_remove{};
-
-        ImGui::SeparatorText("Directional Light");
-        ImGui::PushID("Directional Light");
-        {
-            bool changed = ImGui::DragFloat3("Direction", glm::value_ptr(state.DirectionalLight.Direction), 0.0001f, -1.0f, 1.0f, "%.5f");
-            changed |= ImGui::ColorPicker3("Color", glm::value_ptr(state.DirectionalLight.Color));
-
-            if (changed) {
-                pbr->setDirectionalLight(state.DirectionalLight);
-            }
-        }
-        ImGui::PopID();
-        ImGui::Separator();
-        ImGui::SeparatorText("Point Lights");
-        ImGui::PushID("Add Point Lights");
-        {
-            static PBR::PointLight add_light{};
-
-            ImGui::DragFloat3("Position", glm::value_ptr(add_light.Position), 0.01f);
-            ImGui::DragFloat("Constant", &add_light.Constant, 0.01f, 0.0f);
-            ImGui::DragFloat("Linear", &add_light.Linear, 0.01f, 0.0f);
-            ImGui::DragFloat("Quadratic", &add_light.Quadratic, 0.01f, 0.0f);
-            ImGui::ColorPicker3("Color", glm::value_ptr(add_light.Color));
-
-            if (ImGui::Button("Add Point Light")) {
-                const auto point_light = state.PointLights.emplace_back(pbr->addPointLight(add_light));
-
-                state.PointLightValues[point_light] = add_light;
-            }
-        }
-        ImGui::PopID();
-        ImGui::Separator();
-        ImGui::SeparatorText("Existing Point Lights");
-        for (uint32_t point_light_index = 0; point_light_index < state.PointLights.size(); point_light_index++) {
-            ImGui::PushID(point_light_index);
-            const auto &point_light = state.PointLights[point_light_index];
-
-            auto &light = state.PointLightValues[point_light];
-
-            ImGui::Text("Point Light: %u", point_light.ID);
-
-            if (ImGui::Button("Remove")) {
-                point_lights_to_remove.push_back(point_light);
-            }
-
-            bool changed = ImGui::DragFloat3("Position", glm::value_ptr(light.Position), 0.01f);
-            changed |= ImGui::DragFloat("Constant", &light.Constant, 0.01f, 0.0f);
-            changed |= ImGui::DragFloat("Linear", &light.Linear, 0.01f, 0.0f);
-            changed |= ImGui::DragFloat("Quadratic", &light.Quadratic, 0.01f, 0.0f);
-            changed |= ImGui::ColorPicker3("Color", glm::value_ptr(light.Color));
-
-            if (changed)
-                pbr->setPointLight(point_light, light);
-            ImGui::PopID();
-        }
-        ImGui::Separator();
-        ImGui::SeparatorText("Spot Lights");
-        ImGui::PushID("Add Spot Lights");
-        {
-            static PBR::SpotLight add_light{};
-
-            ImGui::DragFloat3("Position", glm::value_ptr(add_light.Position), 0.01f);
-            ImGui::DragFloat3("Direction", glm::value_ptr(add_light.Direction), 0.01f);
-            ImGui::DragFloat("CutOff", &add_light.CutOff, 0.01f, 0.0f);
-            ImGui::DragFloat("OuterCutOff", &add_light.OuterCutOff, 0.01f, 0.0f);
-            ImGui::DragFloat("Constant", &add_light.Constant, 0.01f, 0.0f);
-            ImGui::DragFloat("Linear", &add_light.Linear, 0.01f, 0.0f);
-            ImGui::DragFloat("Quadratic", &add_light.Quadratic, 0.01f, 0.0f);
-            ImGui::ColorPicker3("Color", glm::value_ptr(add_light.Color));
-
-            if (ImGui::Button("Add Spot Light")) {
-                const auto point_light = state.SpotLights.emplace_back(pbr->addSpotLight(add_light));
-
-                state.SpotLightValues[point_light] = add_light;
-            }
-        }
-        ImGui::PopID();
-        ImGui::Separator();
-        ImGui::SeparatorText("Existing Spot Lights");
-        for (uint32_t spot_light_index = 0; spot_light_index < state.SpotLights.size(); spot_light_index++) {
-            ImGui::PushID(spot_light_index);
-            const auto &spot_light = state.SpotLights[spot_light_index];
-
-            auto &light = state.SpotLightValues[spot_light];
-
-            ImGui::Text("Spot Light: %u", spot_light);
-
-            if (ImGui::Button("Remove")) {
-                spot_lights_to_remove.push_back(spot_light);
-            }
-
-            bool changed = ImGui::DragFloat3("Position", glm::value_ptr(light.Position), 0.01f);
-            changed |= ImGui::DragFloat3("Direction", glm::value_ptr(light.Direction), 0.01f);
-            changed |= ImGui::DragFloat("CutOff", &light.CutOff, 0.01f, 0.0f);
-            changed |= ImGui::DragFloat("OuterCutOff", &light.OuterCutOff, 0.01f, 0.0f);
-            changed |= ImGui::DragFloat("Constant", &light.Constant, 0.01f, 0.0f);
-            changed |= ImGui::DragFloat("Linear", &light.Linear, 0.01f, 0.0f);
-            changed |= ImGui::DragFloat("Quadratic", &light.Quadratic, 0.01f, 0.0f);
-            changed |= ImGui::ColorPicker3("Color", glm::value_ptr(light.Color));
-
-            if (changed)
-                pbr->setSpotLight(spot_light, light);
-            ImGui::PopID();
-        }
-        ImGui::Separator();
-
-        while (!point_lights_to_remove.empty()) {
-            const auto point_light = point_lights_to_remove.back();
-            point_lights_to_remove.pop_back();
-
-            state.PointLightValues.erase(point_light);
-
-            if (const auto it = std::ranges::find(state.PointLights, point_light);
-                it != std::end(state.PointLights))
-                state.PointLights.erase(it);
-        }
-
-        while (!spot_lights_to_remove.empty()) {
-            const auto spot_light = spot_lights_to_remove.back();
-            spot_lights_to_remove.pop_back();
-
-            state.SpotLightValues.erase(spot_light);
-
-            if (const auto it = std::ranges::find(state.SpotLights, spot_light);
-                it != std::end(state.SpotLights))
-                state.SpotLights.erase(it);
-        }
-    }
-
-    void Editor::RenderStaticModelPanel(StaticModelPanelState &state, PBR *pbr) {
-        ImGui::SeparatorText("Load Static Model");
-        static char static_model_path[1024];
-        ImGui::InputText("path", static_model_path, 1024);
-
-        if (ImGui::Button("Load Static Model")) {
-            if (const std::string_view path = static_model_path;
-                std::filesystem::exists(path)) {
-                if (const auto model = pbr->addStaticModel(path);
-                    !state.StaticModelUIStates.contains(model)) {
-                    state.StaticModelUIStates[model] = AddUIState{};
-                    state.StaticInstances[model].clear();
-                    state.StaticModels.push_back(model);
-                }
-            } else {
-                DIGNIS_LOG_ENGINE_WARN("No static model exists on path: {}", path);
-            }
-        }
-
-        gtl::flat_hash_map<PBR::StaticModelID, std::vector<PBR::StaticInstanceID>> instances_to_remove{};
-
-        std::vector<PBR::StaticModelID> models_to_remove{};
-
-        ImGui::SeparatorText("Loaded Static Models");
-        for (uint32_t model_index = 0; model_index < state.StaticModels.size(); model_index++) {
-            const auto &model = state.StaticModels[model_index];
-            ImGui::PushID(model_index);
-            ImGui::Text("Path: %s", pbr->getStaticModelPath(model).data());
-
-            {
-                ImGui::SeparatorText("Add Static Instance");
-                static auto add_position = glm::vec3{0.0f};
-                static auto add_rotation = glm::vec3{0.0f};
-                static auto add_scale    = 1.0f;
-
-                ImGui::DragFloat3("Position", glm::value_ptr(add_position), 0.1f);
-                ImGui::DragFloat3("Rotation", glm::value_ptr(add_rotation), 1.0f);
-                ImGui::DragFloat("Scale", &add_scale, 0.0005f, 0.0f, 10.0f, "%.6f");
-
-                if (ImGui::Button("Add Instance")) {
-                    const glm::mat4x4 scaled     = glm::scale(glm::mat4x4{1.0f}, glm::vec3{add_scale});
-                    const glm::mat4x4 rotated    = glm::toMat4(glm::quat(glm::radians(add_rotation)));
-                    const glm::mat4x4 translated = glm::translate(glm::mat4x4{1.0f}, add_position);
-
-                    const glm::mat4x4 final = translated * rotated * scaled;
-
-                    state.StaticInstances[model].push_back(pbr->addStaticInstance(model, final));
-                    state.StaticInstanceUIStates[state.StaticInstances[model].back()] = InstanceUIState{
-                        add_position,
-                        add_rotation,
-                        add_scale,
-                        true,
-                    };
-                }
-            }
-
-            ImGui::SeparatorText("Static Instances");
-            for (uint32_t instance_index = 0; instance_index < state.StaticInstances[model].size(); instance_index++) {
-                ImGui::PushID(instance_index);
-                ImGui::Text("Instance %u", instance_index);
-
-                auto &[position, rotation, scale, initialized] = state.StaticInstanceUIStates[state.StaticInstances[model][instance_index]];
-
-                bool changed = ImGui::DragFloat3("Position", glm::value_ptr(position), 0.1f);
-                changed |= ImGui::DragFloat3("Rotation", glm::value_ptr(rotation), 1.0f);
-                changed |= ImGui::DragFloat("Scale", &scale, 0.0005f, 0.0f, 10.0f, "%.6f");
-
-                const glm::mat4x4 scaled     = glm::scale(glm::mat4x4{1.0f}, glm::vec3{scale});
-                const glm::mat4x4 rotated    = glm::toMat4(glm::quat(glm::radians(rotation)));
-                const glm::mat4x4 translated = glm::translate(glm::mat4x4{1.0f}, position);
-
-                const glm::mat4x4 model_transform = translated * rotated * scaled;
-
-                if (changed)
-                    pbr->setStaticInstance(state.StaticInstances[model][instance_index], model_transform);
-
-                if (ImGui::Button("Remove Instance")) {
-                    instances_to_remove[model].push_back(state.StaticInstances[model][instance_index]);
-                }
-
-                ImGui::Separator();
-                ImGui::PopID();
-            }
-
-            if (ImGui::Button("Unload Model")) {
-                models_to_remove.push_back(model);
-            }
-
-            ImGui::Separator();
-            ImGui::PopID();
-        }
-
-        for (auto &[model, instances] : instances_to_remove) {
-            while (!instances.empty()) {
-                const auto instance = instances.back();
-                instances.pop_back();
-                pbr->removeStaticInstance(instance);
-                state.StaticInstanceUIStates.erase(instance);
-
-                if (const auto it = std::ranges::find(state.StaticInstances[model], instance);
-                    it != std::end(state.StaticInstances[model]))
-                    state.StaticInstances[model].erase(it);
-            }
-        }
-
-        while (!models_to_remove.empty()) {
-            const auto model = models_to_remove.back();
-            models_to_remove.pop_back();
-            pbr->removeStaticModel(model);
-            state.StaticInstances.erase(model);
-            state.StaticModelUIStates.erase(model);
-
-            if (const auto it = std::ranges::find(state.StaticModels, model);
-                it != std::end(state.StaticModels))
-                state.StaticModels.erase(it);
-        }
     }
 
     Editor::Editor(const Settings &settings) {
@@ -272,20 +21,6 @@ namespace Ignis {
 
         createViewportImage(engine.getUISystem<ImGuiSystem>(), 1, 1, frame_graph);
 
-        m_pPBR = std::make_unique<PBR>(PBR::Settings{
-            frame_graph,
-            m_ViewportImageID,
-            m_DepthImageID,
-            {
-                "Assets/Cubemaps/sky_34_cubemap_2k/px.png",
-                "Assets/Cubemaps/sky_34_cubemap_2k/nx.png",
-                "Assets/Cubemaps/sky_34_cubemap_2k/py.png",
-                "Assets/Cubemaps/sky_34_cubemap_2k/ny.png",
-                "Assets/Cubemaps/sky_34_cubemap_2k/pz.png",
-                "Assets/Cubemaps/sky_34_cubemap_2k/nz.png",
-            }
-        });
-
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor attached");
     }
 
@@ -295,8 +30,6 @@ namespace Ignis {
         Engine &engine = Engine::GetRef();
 
         FrameGraph &frame_graph = engine.getFrameGraph();
-
-        m_pPBR = nullptr;
 
         destroyViewportImage(engine.getUISystem<ImGuiSystem>(), frame_graph);
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor detached");
@@ -322,25 +55,22 @@ namespace Ignis {
         const auto height = static_cast<float>(m_ViewportImage.Extent.height);
         const auto aspect = width / height;
 
-        m_pPBR->setCamera({m_Camera.getProjection(aspect), m_Camera.getView(), m_Camera.getPosition()});
+        Render::SetCamera({m_Camera.getProjection(aspect), m_Camera.getView(), m_Camera.getPosition()});
     }
 
     void Editor::onGUI(IGUISystem *ui_system) {
         const auto im_gui = dynamic_cast<ImGuiSystem *>(ui_system);
 
-        ImGui::Begin("Ignis::EditorLayer::LightState");
-        RenderLightPanel(m_LightPanelState, m_pPBR.get());
-        ImGui::End();
-
         ImGui::Begin("Ignis::EditorLayer::Toolbox");
-
         if (ImGui::Button("Play")) {
             m_Play = true;
             ImGui_ImplGlfw_RestoreCallbacks(Window::GetHandle());
         }
+        RenderModelPanel(m_ModelPanel);
+        ImGui::End();
 
-        RenderStaticModelPanel(m_StaticModelPanelState, m_pPBR.get());
-
+        ImGui::Begin("Ignis::EditorLayer::Lights");
+        RenderLightPanel(m_LightPanel);
         ImGui::End();
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -356,7 +86,6 @@ namespace Ignis {
             auto &frame_graph = Engine::GetRef().getFrameGraph();
             destroyViewportImage(im_gui, frame_graph);
             createViewportImage(im_gui, static_cast<uint32_t>(viewport_size.x), static_cast<uint32_t>(viewport_size.y), frame_graph);
-            m_pPBR->onResize(m_ViewportImageID, m_DepthImageID);
         }
 
         ImGui::Image(static_cast<const VkDescriptorSet &>(m_ViewportDescriptor), viewport_size);
@@ -364,8 +93,7 @@ namespace Ignis {
         ImGui::End();
     }
 
-    void Editor::onRender(FrameGraph &) {
-        m_pPBR->onRender();
+    void Editor::onRender(FrameGraph &frame_graph) {
     }
 
     void Editor::createViewportImage(
@@ -419,7 +147,7 @@ namespace Ignis {
             merger.flushBarriers(command_buffer);
         });
 
-        m_ViewportImageID = frame_graph.importImage(
+        m_ColorImageID = frame_graph.importImage(
             m_ViewportImage.Handle,
             m_ViewportView,
             m_ViewportImage.Format,
@@ -437,13 +165,15 @@ namespace Ignis {
             vk::ImageLayout::eDepthAttachmentOptimal,
             vk::ImageLayout::eDepthAttachmentOptimal);
 
-        m_ViewportDescriptor = im_gui->addImage2D(m_ViewportImageID, m_ViewportView);
+        m_ViewportDescriptor = im_gui->addImage2D(m_ColorImageID, m_ViewportView);
+
+        Render::SetViewport(m_ColorImageID, m_DepthImageID);
     }
 
     void Editor::destroyViewportImage(ImGuiSystem *im_gui, FrameGraph &frame_graph) {
-        im_gui->removeImage2D(m_ViewportImageID, m_ViewportDescriptor);
+        im_gui->removeImage2D(m_ColorImageID, m_ViewportDescriptor);
 
-        frame_graph.removeImage(m_ViewportImageID);
+        frame_graph.removeImage(m_ColorImageID);
         frame_graph.removeImage(m_DepthImageID);
 
         Vulkan::DestroyImageView(m_ViewportView);

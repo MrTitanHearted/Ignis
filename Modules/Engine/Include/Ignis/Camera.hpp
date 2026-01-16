@@ -19,7 +19,7 @@ namespace Ignis {
             eUp,
             eDown,
             eWorldForward,
-            eWorldBackword,
+            eWorldBackward,
             eWorldUp,
             eWorldDown,
             eRight,

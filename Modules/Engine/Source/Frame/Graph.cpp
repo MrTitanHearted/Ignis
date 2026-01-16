@@ -644,11 +644,11 @@ namespace Ignis {
                         src_access,
                         dst_stages,
                         dst_access);
-
-                resource_tracker.LastImageLayout[image_id] = src_layout;
-                resource_tracker.LastImageStages[image_id] = src_stage;
-                resource_tracker.LastImageAccess[image_id] = dst_access;
             }
+
+            resource_tracker.LastImageLayout[image_id] = src_layout;
+            resource_tracker.LastImageStages[image_id] = src_stage;
+            resource_tracker.LastImageAccess[image_id] = dst_access;
         }
 
         m_RenderPasses.clear();
@@ -688,11 +688,11 @@ namespace Ignis {
                     src_access,
                     dst_stages,
                     dst_access);
-
-                resource_tracker.LastImageLayout[image_id] = dst_layout;
-                resource_tracker.LastImageStages[image_id] = dst_stages;
-                resource_tracker.LastImageAccess[image_id] = dst_access;
             }
+
+            resource_tracker.LastImageLayout[image_id] = dst_layout;
+            resource_tracker.LastImageStages[image_id] = dst_stages;
+            resource_tracker.LastImageAccess[image_id] = dst_access;
         }
 
         for (const auto &attachment : render_pass.m_ColorAttachments) {
@@ -720,11 +720,11 @@ namespace Ignis {
                     src_access,
                     dst_stages,
                     dst_access);
-
-                resource_tracker.LastImageLayout[attachment.Image] = dst_layout;
-                resource_tracker.LastImageStages[attachment.Image] = dst_stages;
-                resource_tracker.LastImageAccess[attachment.Image] = dst_access;
             }
+
+            resource_tracker.LastImageLayout[attachment.Image] = dst_layout;
+            resource_tracker.LastImageStages[attachment.Image] = dst_stages;
+            resource_tracker.LastImageAccess[attachment.Image] = dst_access;
         }
 
         if (render_pass.m_DepthAttachment.has_value()) {
@@ -750,11 +750,11 @@ namespace Ignis {
                     src_access,
                     dst_stages,
                     dst_access);
-
-                resource_tracker.LastImageLayout[attachment.Image] = dst_layout;
-                resource_tracker.LastImageStages[attachment.Image] = dst_stages;
-                resource_tracker.LastImageAccess[attachment.Image] = dst_access;
             }
+
+            resource_tracker.LastImageLayout[attachment.Image] = dst_layout;
+            resource_tracker.LastImageStages[attachment.Image] = dst_stages;
+            resource_tracker.LastImageAccess[attachment.Image] = dst_access;
         }
 
         for (const auto &[buffer_id, offset, size, stages] : render_pass.m_ReadBuffers) {
@@ -775,10 +775,10 @@ namespace Ignis {
                     src_access,
                     dst_stages,
                     dst_access);
-
-                resource_tracker.LastBufferStages[buffer_id] = dst_stages;
-                resource_tracker.LastBufferAccess[buffer_id] = dst_access;
             }
+
+            resource_tracker.LastBufferStages[buffer_id] = dst_stages;
+            resource_tracker.LastBufferAccess[buffer_id] = dst_access;
         }
 
         std::vector<vk::RenderingAttachmentInfo>   render_pass_color_attachments{};
@@ -935,12 +935,11 @@ namespace Ignis {
                             src_access,
                             dst_stages,
                             dst_access);
-
-                        resource_tracker.LastImageLayout[image_id] = dst_layout;
-                        resource_tracker.LastImageStages[image_id] = dst_stages;
-                        resource_tracker.LastImageAccess[image_id] = dst_access;
                     }
 
+                    resource_tracker.LastImageLayout[image_id] = dst_layout;
+                    resource_tracker.LastImageStages[image_id] = dst_stages;
+                    resource_tracker.LastImageAccess[image_id] = dst_access;
                 } break;
             }
         }
@@ -967,10 +966,10 @@ namespace Ignis {
                             src_access,
                             dst_stages,
                             dst_access);
-
-                        resource_tracker.LastBufferStages[buffer_id] = dst_stages;
-                        resource_tracker.LastBufferAccess[buffer_id] = dst_access;
                     }
+
+                    resource_tracker.LastBufferStages[buffer_id] = dst_stages;
+                    resource_tracker.LastBufferAccess[buffer_id] = dst_access;
                 } break;
                 case ComputePass::AccessType::eWrite: {
                     const auto &[buffer_id, offset, size, stages] = compute_pass.m_WriteBuffers[index];
@@ -992,11 +991,10 @@ namespace Ignis {
                             src_access,
                             dst_stages,
                             dst_access);
-
-                        resource_tracker.LastBufferStages[buffer_id] = dst_stages;
-                        resource_tracker.LastBufferAccess[buffer_id] = dst_access;
                     }
 
+                    resource_tracker.LastBufferStages[buffer_id] = dst_stages;
+                    resource_tracker.LastBufferAccess[buffer_id] = dst_access;
                 } break;
             }
         }

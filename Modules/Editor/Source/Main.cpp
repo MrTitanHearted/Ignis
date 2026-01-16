@@ -34,6 +34,15 @@ int32_t main(
     engine_settings.WindowSettings.Title = "Ignis::Editor";
     engine_settings.WindowSettings.Icon  = "Assets/Icons/IgnisEditor.png";
 
+    engine_settings.RenderSettings.SkyboxFacePaths = {
+        "Assets/Cubemaps/sky_34_cubemap_2k/px.png",
+        "Assets/Cubemaps/sky_34_cubemap_2k/nx.png",
+        "Assets/Cubemaps/sky_34_cubemap_2k/py.png",
+        "Assets/Cubemaps/sky_34_cubemap_2k/ny.png",
+        "Assets/Cubemaps/sky_34_cubemap_2k/pz.png",
+        "Assets/Cubemaps/sky_34_cubemap_2k/nz.png",
+    };
+
     engine_settings.UISystem = std::make_unique<Ignis::ImGuiSystem>();
 
     Ignis::Logger logger{};

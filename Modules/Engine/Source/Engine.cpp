@@ -19,6 +19,10 @@ namespace Ignis {
         m_Vulkan.initialize(settings.VulkanSettings);
         m_Frame.initialize(settings.FrameSettings);
 
+        settings.RenderSettings.pFrameGraph = &m_Frame.getFrameGraph();
+
+        m_Render.initialize(settings.RenderSettings);
+
         m_GUISystem = std::move(settings.UISystem);
         m_GUISystem->onAttach();
 
@@ -44,6 +48,7 @@ namespace Ignis {
         m_GUISystem->onDetach();
         m_GUISystem = nullptr;
 
+        m_Render.shutdown();
         m_Frame.shutdown();
         m_Vulkan.shutdown();
         m_Window.shutdown();
@@ -83,6 +88,8 @@ namespace Ignis {
 
             for (const auto &layer : m_LayerStack)
                 layer->onRender(frame_graph);
+
+            m_Render.onRender(frame_graph);
 
             m_GUISystem->onRender(frame_graph);
 

@@ -327,6 +327,8 @@ namespace Ignis {
         features
             .setFeatures(
                 vk::PhysicalDeviceFeatures()
+                    .setFullDrawIndexUint32(vk::True)
+                    .setSamplerAnisotropy(vk::True)
                     .setRobustBufferAccess(vk::True)
                     .setMultiDrawIndirect(vk::True))
             .setPNext(&vulkan11_features);

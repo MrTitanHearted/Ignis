@@ -36,7 +36,7 @@ namespace Ignis {
             case Direction::eWorldForward:
                 m_Position += glm::normalize(glm::vec3(m_Front.x, 0.0f, m_Front.z)) * speed;
                 break;
-            case Direction::eWorldBackword:
+            case Direction::eWorldBackward:
                 m_Position -= glm::normalize(glm::vec3(m_Front.x, 0.0f, m_Front.z)) * speed;
                 break;
             case Direction::eWorldUp:

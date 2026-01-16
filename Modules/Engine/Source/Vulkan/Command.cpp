@@ -305,7 +305,7 @@ namespace Ignis {
         const vk::Buffer        src_buffer,
         const vk::Image         dst_image,
         const uint64_t          src_offset,
-        const uint32_t          dst_face_size,
+        const uint64_t          dst_face_size,
         const vk::Extent2D     &dst_extent,
         const vk::CommandBuffer command_buffer) {
         std::array<vk::BufferImageCopy2, 6> regions{};

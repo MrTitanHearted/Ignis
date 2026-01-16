@@ -487,7 +487,7 @@ namespace Ignis {
             vk::Buffer          src_buffer,
             vk::Image           dst_image,
             uint64_t            src_offset,
-            uint32_t            dst_face_size,
+            uint64_t            dst_face_size,
             const vk::Extent2D &dst_extent,
             vk::CommandBuffer   command_buffer);
 

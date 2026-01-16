@@ -6,8 +6,7 @@
 #include <Ignis/Window.hpp>
 #include <Ignis/Vulkan.hpp>
 #include <Ignis/Frame.hpp>
-
-#include <Ignis/RenderModule.hpp>
+#include <Ignis/Render.hpp>
 
 #include <Ignis/Engine/GUISystem.hpp>
 #include <Ignis/Engine/Layer.hpp>
@@ -19,6 +18,7 @@ namespace Ignis {
             Window::Settings WindowSettings{};
             Vulkan::Settings VulkanSettings{};
             Frame::Settings  FrameSettings{};
+            Render::Settings RenderSettings{};
 
             std::unique_ptr<IGUISystem> UISystem = nullptr;
         };
@@ -40,12 +40,12 @@ namespace Ignis {
 
         FrameGraph &getFrameGraph();
 
-        template <typename TUISystem>
-            requires(std::is_base_of_v<IGUISystem, TUISystem>)
-        TUISystem *getUISystem() const {
+        template <typename TGUISystem>
+            requires(std::is_base_of_v<IGUISystem, TGUISystem>)
+        TGUISystem *getUISystem() const {
             DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Engine is not initialized.");
             IGUISystem *ui_system = m_GUISystem.get();
-            return dynamic_cast<TUISystem *>(ui_system);
+            return dynamic_cast<TGUISystem *>(ui_system);
         }
 
         template <typename TLayer, typename... Args>
@@ -94,6 +94,7 @@ namespace Ignis {
         Window m_Window;
         Vulkan m_Vulkan;
         Frame  m_Frame;
+        Render m_Render;
 
         std::unique_ptr<IGUISystem> m_GUISystem;
 

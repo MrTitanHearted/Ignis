@@ -13,6 +13,7 @@ find_package(function2 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
+find_package(mikktspace CONFIG REQUIRED)
 find_package(assimp CONFIG REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
 
@@ -54,6 +55,7 @@ target_link_libraries(IgnisThirdParty PUBLIC
     glm::glm
     spdlog::spdlog
     glfw
+    mikktspace::mikktspace
     assimp::assimp
     EnTT::EnTT
     GPUOpen::VulkanMemoryAllocator

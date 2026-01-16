@@ -40,7 +40,8 @@ namespace Ignis {
         class RenderPass {
            public:
             explicit RenderPass(
-                std::string_view            label,
+                std::string_view label,
+
                 const std::array<float, 4> &label_color = {0.0f, 0.0f, 0.0f, 1.0f});
             ~RenderPass() = default;
 
@@ -72,7 +73,8 @@ namespace Ignis {
         class ComputePass {
            public:
             explicit ComputePass(
-                std::string_view            label,
+                std::string_view label,
+
                 const std::array<float, 4> &label_color = {0.0f, 0.0f, 0.0f, 1.0f});
             ~ComputePass() = default;
 

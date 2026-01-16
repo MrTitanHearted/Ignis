@@ -8,6 +8,7 @@
         "glfw3",
         "glm",
         "stb",
+        "mikktspace",
         "assimp",
         "entt"
     ]
