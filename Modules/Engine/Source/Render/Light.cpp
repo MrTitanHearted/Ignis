@@ -406,6 +406,13 @@ namespace Ignis {
                 vk::BufferUsageFlagBits::eTransferSrc |
                 vk::BufferUsageFlagBits::eTransferDst);
 
+        {
+            LightData light_data{};
+            light_data.PointLightCount = 0;
+            light_data.SpotLightCount  = 0;
+            Vulkan::CopyMemoryToAllocation(&light_data, m_LightDataBuffer.Allocation, 0, m_LightDataBuffer.Size);
+        }
+
         m_FrameGraphDirectionalLightBuffer = FrameGraph::BufferInfo{
             m_pFrameGraph->importBuffer(m_DirectionalLightBuffer.Handle, m_DirectionalLightBuffer.Usage, 0, m_DirectionalLightBuffer.Size),
             0,

@@ -215,6 +215,8 @@ namespace Ignis {
 
         Assimp::Importer importer{};
 
+        Vulkan::WaitDeviceIdle();
+
         const aiScene *ai_scene =
             importer.ReadFile(
                 spath,
@@ -437,6 +439,8 @@ namespace Ignis {
 
         Model &model = m_Models.at(model_id);
 
+        Vulkan::WaitDeviceIdle();
+
         Instance instance{};
         instance.VertexTransform = transform;
         instance.NormalTransform = GetNormalTransform(transform);
@@ -517,6 +521,8 @@ namespace Ignis {
 
         const auto &model = m_Models.at(id);
 
+        Vulkan::WaitDeviceIdle();
+
         Vulkan::DescriptorSetWriter()
             .writeStorageBuffer(0, id.ID, nullptr, 0, vk::WholeSize)
             .writeStorageBuffer(1, id.ID, nullptr, 0, vk::WholeSize)
@@ -575,6 +581,8 @@ namespace Ignis {
 
     void Render::removeInstance(const InstanceID id) {
         DIGNIS_ASSERT(m_Instances.contains(id));
+
+        Vulkan::WaitDeviceIdle();
 
         const auto model_id = m_InstanceToModel.at(id);
 
@@ -775,9 +783,9 @@ namespace Ignis {
         if (AI_SUCCESS != ai_material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness_factor))
             roughness_factor = 1.0f;
 
-        auto albedo_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_BASE_COLOR, true);
+        auto albedo_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_BASE_COLOR, false);
         if (k_InvalidTextureID == albedo_texture) {
-            albedo_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_DIFFUSE, true);
+            albedo_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_DIFFUSE, false);
         }
         auto normal_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_NORMALS, false);
         if (k_InvalidTextureID == normal_texture) {

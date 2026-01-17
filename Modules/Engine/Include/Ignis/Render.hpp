@@ -77,9 +77,7 @@ namespace Ignis {
 
         struct DirectionalLight {
             glm::vec3 Direction{0.0f, -1.0f, 0.0f};
-
-            glm::f32 Power{1.0f};
-
+            glm::f32  Power{1.0f};
             glm::vec3 Color{0.0f};
 
             glm::f32 _ignis_padding1{};
@@ -87,32 +85,24 @@ namespace Ignis {
 
         struct PointLight {
             glm::vec3 Position{0.0f};
-            glm::f32  Constant{0.0f};
+            glm::f32  Power{1.0f};
             glm::vec3 Color{0.0f};
-            glm::f32  Linear{0.0f};
 
-            glm::f32 Quadratic{1.0f};
-
-            glm::f32 _ignis_padding[3]{};
+            glm::f32 _ignis_padding{};
         };
 
         struct SpotLight {
             glm::vec3 Position{0.0f};
-            glm::f32  Constant{0.0f};
+            glm::f32  Power{1.0f};
             glm::vec3 Direction{0.0f, 0.0f, 1.0f};
-            glm::f32  Linear{0.0f};
+            glm::f32  CutOff{glm::radians(12.5f)};
             glm::vec3 Color{0.0f};
-            glm::f32  Quadratic{1.0f};
-
-            glm::f32 CutOff{glm::radians(12.5f)};
-            glm::f32 OuterCutOff{glm::radians(15.0f)};
-
-            glm::f32 _ignis_padding[2]{};
+            glm::f32  OuterCutOff{glm::radians(15.0f)};
         };
 
         struct LightData {
-            glm::u32 PointLightCount{~0u};
-            glm::u32 SpotLightCount{~0u};
+            glm::u32 PointLightCount{0u};
+            glm::u32 SpotLightCount{0u};
 
             glm::f32 _ignis_padding[2]{};
         };

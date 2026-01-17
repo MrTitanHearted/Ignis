@@ -53,32 +53,24 @@ struct DirectionalLight {
     float3 Direction;
     float  Power;
     float3 Color;
-    float  _ignis_padding1;
+    float  _ignis_padding;
 };
 
 struct PointLight {
     float3 Position;
-    float  Constant;
+    float  Power;
     float3 Color;
-    float  Linear;
 
-    float Quadratic;
-
-    float _ignis_padding[3];
+    float _ignis_padding;
 };
 
 struct SpotLight {
     float3 Position;
-    float  Constant;
+    float  Power;
     float3 Direction;
-    float  Linear;
+    float  CutOff;
     float3 Color;
-    float  Quadratic;
-
-    float CutOff;
-    float OuterCutOff;
-
-    float _ignis_padding[2];
+    float  OuterCutOff;
 };
 
 struct LightData {
@@ -225,10 +217,163 @@ float4 fs_main(FragmentInput input) : SV_Target {
         }
     }
 
+    // PBR lighting calculation
+    float3 N = normalize(material_normal);
+    float3 V = normalize(gDrawPC.ViewPosition - input.FragmentPosition);
+
     float3 result = float3(0.0f);
 
-    result = material_normal * 0.5f + 0.5f;
+    float3 f0 = GetF0Metallic(material_albedo, material_metallic);
 
-    return float4(result * 2.0f- 1.0f, 1.0f);
+    // Directional light
+    {
+        float3 L = normalize(-gDirectionLight.Direction);
+        float3 H = normalize(V + L);
+
+        float n_dot_v = max(dot(N, V), 0.0f);
+        float n_dot_l = max(dot(N, L), 0.0f);
+        float n_dot_h = max(dot(N, H), 0.0f);
+        float v_dot_h = max(dot(V, H), 0.0f);
+
+        float  D = CalculateDistributionGGX(n_dot_h, material_roughness);
+        float3 F = CalculateFresnelSchlick(v_dot_h, f0);
+        float  G = CalculateGeometrySmith(n_dot_v, n_dot_l, material_roughness);
+
+        float3 kS = F;
+        float3 kD = 1.0f - kS;
+
+        float3 diffuse_brdf  = EvaluateDiffuseBRDF(kD, material_albedo);
+        float3 specular_brdf = EvaluateSpecularBRDF(kS, D, F, G, n_dot_l, n_dot_v);
+
+        float3 radiance = gDirectionLight.Color * gDirectionLight.Power;
+
+        result += EvaluateBRDF(diffuse_brdf, specular_brdf, radiance, n_dot_l);
+    }
+
+    for (uint i = 0; i < gLightData.PointLightCount; i++) {
+        float3 LightToFragment = gPointLights[i].Position - input.FragmentPosition;
+
+        float3 L = normalize(LightToFragment);
+        float3 H = normalize(V + L);
+
+        float n_dot_v = max(dot(N, V), 0.0f);
+        float n_dot_l = max(dot(N, L), 0.0f);
+        float n_dot_h = max(dot(N, H), 0.0f);
+        float v_dot_h = max(dot(V, H), 0.0f);
+
+        float  D = CalculateDistributionGGX(n_dot_h, material_roughness);
+        float3 F = CalculateFresnelSchlick(v_dot_h, f0);
+        float  G = CalculateGeometrySmith(n_dot_v, n_dot_l, material_roughness);
+
+        float3 kS = F;
+        float3 kD = 1.0f - kS;
+
+        float3 diffuse_brdf  = EvaluateDiffuseBRDF(kD, material_albedo);
+        float3 specular_brdf = EvaluateSpecularBRDF(kS, D, F, G, n_dot_l, n_dot_v);
+
+        float attenuation = length(LightToFragment);
+
+        float3 radiance = gPointLights[i].Color * gPointLights[i].Power / attenuation * attenuation;
+
+        result += EvaluateBRDF(diffuse_brdf, specular_brdf, radiance, n_dot_l);
+    }
+
+    for (uint i = 0; i < gLightData.SpotLightCount; i++) {
+        float3 LightToFragment = gSpotLights[i].Position - input.FragmentPosition;
+
+        float3 L = normalize(LightToFragment);
+        float3 H = normalize(V + L);
+
+        float n_dot_v = max(dot(N, V), 0.0f);
+        float n_dot_l = max(dot(N, L), 0.0f);
+        float n_dot_h = max(dot(N, H), 0.0f);
+        float v_dot_h = max(dot(V, H), 0.0f);
+
+        float  D = CalculateDistributionGGX(n_dot_h, material_roughness);
+        float3 F = CalculateFresnelSchlick(v_dot_h, f0);
+        float  G = CalculateGeometrySmith(n_dot_v, n_dot_l, material_roughness);
+
+        float3 kS = F;
+        float3 kD = 1.0f - kS;
+
+        float3 diffuse_brdf  = EvaluateDiffuseBRDF(kD, material_albedo);
+        float3 specular_brdf = EvaluateSpecularBRDF(kS, D, F, G, n_dot_l, n_dot_v);
+
+        float theta     = dot(L, normalize(-gSpotLights[i].Direction));
+        float epsilon   = gSpotLights[i].CutOff - gSpotLights[i].OuterCutOff;
+        float intensity = clamp((theta - gSpotLights[i].OuterCutOff) / epsilon, 0.0f, 1.0f);
+
+        float attenuation = length(LightToFragment);
+
+        float3 radiance = gSpotLights[i].Color * gSpotLights[i].Power * intensity / attenuation * attenuation;
+
+        result += EvaluateBRDF(diffuse_brdf, specular_brdf, radiance, n_dot_l);
+    }
+
+    // Add ambient occlusion and emission
+    float3 ambient = float3(0.03f) * material_albedo * material_ao;
+    result += ambient + material_emission;
+
+    result = result / (result + 1.0f);
+
+    return float4(result, 1.0f);
+}
+
+float3 EvaluateBRDF(
+    float3 diffuse_brdf,
+    float3 specular_brdf,
+    float3 radiance,
+    float  n_dot_l) {
+    return (diffuse_brdf + specular_brdf) * radiance * n_dot_l;
+}
+
+float3 EvaluateDiffuseBRDF(
+    float3 kD,
+    float3 material_albedo) {
+    return kD * material_albedo / k_PI;
+}
+
+float3 EvaluateSpecularBRDF(
+    float3 kS,
+    float  D,
+    float3 F,
+    float  G,
+    float  n_dot_l,
+    float  n_dot_v) {
+    return kS * D * G * F / max(4 * n_dot_v * n_dot_l, 0.000001f);
+}
+
+float CalculateDistributionGGX(float n_dot_h, float roughness) {
+    float a = roughness * roughness * roughness * roughness;
+
+    float denominator = (n_dot_h * n_dot_h * (a - 1.0f) + 1.0f);
+
+    denominator = k_PI * denominator * denominator;
+
+    return a / denominator;
+}
+
+float CalculateGeometrySmith(float n_dot_v, float n_dot_l, float roughness) {
+    float schlick_light = CalculateGeometrySchlickGGX(n_dot_l, roughness);
+    float schlick_view  = CalculateGeometrySchlickGGX(n_dot_v, roughness);
+
+    return schlick_light * schlick_view;
+}
+
+float CalculateGeometrySchlickGGX(float dot_product, float roughness) {
+    float r = roughness + 1.0f;
+    float k = r * r / 8.0f;
+
+    float denominator = dot_product * (1.0f - k) + k;
+
+    return dot_product / denominator;
+}
+
+float3 CalculateFresnelSchlick(float v_dot_h, float3 f0) {
+    return f0 + (1.0f - f0) * pow(clamp(1.0f - v_dot_h, 0.0f, 1.0f), 5.0f);
+}
+
+float3 GetF0Metallic(float3 albedo, float metallic) {
+    return lerp(float3(0.04f), albedo, metallic);
 }
 

@@ -185,9 +185,7 @@ namespace Ignis {
                 static Render::PointLight add_light{};
 
                 ImGui::DragFloat3("Position", glm::value_ptr(add_light.Position), 0.01f);
-                ImGui::DragFloat("Constant", &add_light.Constant, 0.01f, 0.0f);
-                ImGui::DragFloat("Linear", &add_light.Linear, 0.01f, 0.0f);
-                ImGui::DragFloat("Quadratic", &add_light.Quadratic, 0.01f, 0.0f);
+                ImGui::DragFloat("Power", &add_light.Power, 0.01f, 0.0f);
                 ImGui::ColorEdit3("Color", glm::value_ptr(add_light.Color));
 
                 if (ImGui::Button("Add", ImVec2(-1, 0))) {
@@ -215,9 +213,7 @@ namespace Ignis {
                         const std::string light_label = "Light " + std::to_string(light_index);
                         if (ImGui::TreeNode(light_label.c_str())) {
                             bool changed = ImGui::DragFloat3("Position", glm::value_ptr(light.Position), 0.01f);
-                            changed |= ImGui::DragFloat("Constant", &light.Constant, 0.01f, 0.0f);
-                            changed |= ImGui::DragFloat("Linear", &light.Linear, 0.01f, 0.0f);
-                            changed |= ImGui::DragFloat("Quadratic", &light.Quadratic, 0.01f, 0.0f);
+                            changed |= ImGui::DragFloat("Power", &light.Power, 0.01f, 0.0f);
                             changed |= ImGui::ColorEdit3("Color", glm::value_ptr(light.Color));
 
                             if (changed) {
@@ -250,9 +246,7 @@ namespace Ignis {
                 ImGui::DragFloat3("Direction", glm::value_ptr(add_light.Direction), 0.01f);
                 ImGui::DragFloat("CutOff", &add_light.CutOff, 0.01f, 0.0f);
                 ImGui::DragFloat("OuterCutOff", &add_light.OuterCutOff, 0.01f, 0.0f);
-                ImGui::DragFloat("Constant", &add_light.Constant, 0.01f, 0.0f);
-                ImGui::DragFloat("Linear", &add_light.Linear, 0.01f, 0.0f);
-                ImGui::DragFloat("Quadratic", &add_light.Quadratic, 0.01f, 0.0f);
+                ImGui::DragFloat("Power", &add_light.Power, 0.01f, 0.0f);
                 ImGui::ColorEdit3("Color", glm::value_ptr(add_light.Color));
 
                 if (ImGui::Button("Add", ImVec2(-1, 0))) {
@@ -283,9 +277,7 @@ namespace Ignis {
                             changed |= ImGui::DragFloat3("Direction", glm::value_ptr(light.Direction), 0.01f);
                             changed |= ImGui::DragFloat("CutOff", &light.CutOff, 0.01f, 0.0f);
                             changed |= ImGui::DragFloat("OuterCutOff", &light.OuterCutOff, 0.01f, 0.0f);
-                            changed |= ImGui::DragFloat("Constant", &light.Constant, 0.01f, 0.0f);
-                            changed |= ImGui::DragFloat("Linear", &light.Linear, 0.01f, 0.0f);
-                            changed |= ImGui::DragFloat("Quadratic", &light.Quadratic, 0.01f, 0.0f);
+                            changed |= ImGui::DragFloat("Power", &light.Power, 0.01f, 0.0f);
                             changed |= ImGui::ColorEdit3("Color", glm::value_ptr(light.Color));
 
                             if (changed) {
