@@ -6,7 +6,8 @@ namespace Ignis {
             Vulkan::DescriptorSetLayoutBuilder()
                 .addCombinedImageSampler(0, max_binding_count, vk::ShaderStageFlagBits::eFragment)
                 .addCombinedImageSampler(1, vk::ShaderStageFlagBits::eFragment)
-                .addStorageBuffer(2, vk::ShaderStageFlagBits::eFragment)
+                .addCombinedImageSampler(2, vk::ShaderStageFlagBits::eFragment)
+                .addStorageBuffer(3, vk::ShaderStageFlagBits::eFragment)
                 .build();
 
         m_MaterialDescriptorSet = Vulkan::AllocateDescriptorSet(m_MaterialDescriptorLayout, m_DescriptorPool);
@@ -42,7 +43,8 @@ namespace Ignis {
 
         Vulkan::DescriptorSetWriter()
             .writeCombinedImageSampler(1, m_SkyboxImageView, vk::ImageLayout::eShaderReadOnlyOptimal, m_Sampler)
-            .writeStorageBuffer(2, m_MaterialBuffer.Handle, 0, m_MaterialBuffer.Size)
+            .writeCombinedImageSampler(2, m_IrradianceImageView, vk::ImageLayout::eShaderReadOnlyOptimal, m_Sampler)
+            .writeStorageBuffer(3, m_MaterialBuffer.Handle, 0, m_MaterialBuffer.Size)
             .update(m_MaterialDescriptorSet);
     }
 
@@ -140,7 +142,7 @@ namespace Ignis {
             Vulkan::DestroyBuffer(old_buffer);
 
             Vulkan::DescriptorSetWriter()
-                .writeStorageBuffer(2, m_MaterialBuffer.Handle, 0, m_MaterialBuffer.Size)
+                .writeStorageBuffer(3, m_MaterialBuffer.Handle, 0, m_MaterialBuffer.Size)
                 .update(m_MaterialDescriptorSet);
         }
 

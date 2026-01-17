@@ -167,6 +167,8 @@ namespace Ignis {
             Vulkan::DestroyBuffer(staging);
         }
 
+        generateIrradianceMap();
+
         m_FrameGraphSkyboxVertexBuffer = FrameGraph::BufferInfo{
             m_pFrameGraph->importBuffer(m_SkyboxVertexBuffer.Handle, m_SkyboxVertexBuffer.Usage, 0, m_SkyboxVertexBuffer.Size),
             0,
@@ -191,6 +193,16 @@ namespace Ignis {
                 vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageLayout::eShaderReadOnlyOptimal);
 
+        m_FrameGraphIrradianceImage =
+            m_pFrameGraph->importImage(
+                m_IrradianceImage.Handle,
+                m_IrradianceImageView,
+                m_IrradianceImage.Format,
+                m_IrradianceImage.Usage,
+                m_IrradianceImage.Extent,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal);
+
         const FileAsset skybox_shader_file = FileAsset::LoadBinaryFromPath("Assets/Shaders/Ignis/Skybox.spv").value();
 
         std::vector<uint32_t> skybox_shader_code{};
@@ -202,9 +214,10 @@ namespace Ignis {
     }
 
     void Render::releaseSkybox() {
-        m_pFrameGraph->removeBuffer(m_FrameGraphSkyboxVertexBuffer.Buffer);
-        m_pFrameGraph->removeBuffer(m_FrameGraphSkyboxIndexBuffer.Buffer);
+        m_pFrameGraph->removeImage(m_FrameGraphIrradianceImage);
         m_pFrameGraph->removeImage(m_FrameGraphSkyboxImage);
+        m_pFrameGraph->removeBuffer(m_FrameGraphSkyboxIndexBuffer.Buffer);
+        m_pFrameGraph->removeBuffer(m_FrameGraphSkyboxVertexBuffer.Buffer);
 
         Vulkan::DestroyPipeline(m_SkyboxPipeline);
         Vulkan::DestroyShaderModule(g_SkyboxShader);
@@ -213,6 +226,9 @@ namespace Ignis {
 
         Vulkan::DestroyBuffer(m_SkyboxVertexBuffer);
         Vulkan::DestroyBuffer(m_SkyboxIndexBuffer);
+
+        Vulkan::DestroyImageView(m_IrradianceImageView);
+        Vulkan::DestroyImage(m_IrradianceImage);
 
         Vulkan::DestroyImageView(m_SkyboxImageView);
         Vulkan::DestroyImage(m_SkyboxImage);
@@ -247,7 +263,7 @@ namespace Ignis {
     }
 
     void Render::readSkyboxImage(FrameGraph::RenderPass &render_pass) const {
-        render_pass.readImages(m_FrameGraphSkyboxImage);
+        render_pass.readImages({m_FrameGraphSkyboxImage, m_FrameGraphIrradianceImage});
     }
 
     void Render::readSkyboxBuffers(FrameGraph::RenderPass &render_pass) const {

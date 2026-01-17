@@ -322,6 +322,7 @@ namespace Ignis {
             .setTimelineSemaphore(vk::True)
             .setPNext(&vulkan13_features);
         vulkan11_features
+            .setMultiview(vk::True)
             .setShaderDrawParameters(vk::True)
             .setPNext(&vulkan12_features);
         features

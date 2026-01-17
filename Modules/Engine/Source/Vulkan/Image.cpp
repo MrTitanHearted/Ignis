@@ -146,6 +146,137 @@ namespace Ignis {
         return image;
     }
 
+    vk::ImageView Vulkan::CreateImageColorViewCube(const vk::Image image, const vk::Format format, const uint32_t base_layer) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        vk::ImageViewCreateInfo create_info{};
+        create_info
+            .setViewType(vk::ImageViewType::eCube)
+            .setFormat(format)
+            .setImage(image)
+            .setSubresourceRange(
+                vk::ImageSubresourceRange{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                    .setBaseArrayLayer(base_layer)
+                    .setBaseMipLevel(0)
+                    .setLayerCount(6)
+                    .setLevelCount(1));
+        auto [result, view] = s_pInstance->m_Device.createImageView(create_info);
+        DIGNIS_VK_CHECK(result);
+        return view;
+    }
+
+    vk::ImageView Vulkan::CreateImageDepthViewCube(const vk::Image image, const vk::Format format, const uint32_t base_layer) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        vk::ImageViewCreateInfo create_info{};
+        create_info
+            .setViewType(vk::ImageViewType::eCube)
+            .setFormat(format)
+            .setImage(image)
+            .setSubresourceRange(
+                vk::ImageSubresourceRange{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eDepth)
+                    .setBaseArrayLayer(base_layer)
+                    .setBaseMipLevel(0)
+                    .setLayerCount(6)
+                    .setLevelCount(1));
+        auto [result, view] = s_pInstance->m_Device.createImageView(create_info);
+        DIGNIS_VK_CHECK(result);
+        return view;
+    }
+
+    vk::ImageView Vulkan::CreateImageColorView2DArray(
+        const vk::Image  image,
+        const vk::Format format,
+        const uint32_t   base_layer,
+        const uint32_t   layer_count) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        vk::ImageViewCreateInfo create_info{};
+        create_info
+            .setViewType(vk::ImageViewType::e2DArray)
+            .setFormat(format)
+            .setImage(image)
+            .setSubresourceRange(
+                vk::ImageSubresourceRange{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                    .setBaseArrayLayer(base_layer)
+                    .setBaseMipLevel(0)
+                    .setLayerCount(layer_count)
+                    .setLevelCount(1));
+        auto [result, view] = s_pInstance->m_Device.createImageView(create_info);
+        DIGNIS_VK_CHECK(result);
+        return view;
+    }
+
+    vk::ImageView Vulkan::CreateImageDepthView2DArray(
+        const vk::Image  image,
+        const vk::Format format,
+        const uint32_t   base_layer,
+        const uint32_t   layer_count) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        vk::ImageViewCreateInfo create_info{};
+        create_info
+            .setViewType(vk::ImageViewType::e2DArray)
+            .setFormat(format)
+            .setImage(image)
+            .setSubresourceRange(
+                vk::ImageSubresourceRange{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eDepth)
+                    .setBaseArrayLayer(base_layer)
+                    .setBaseMipLevel(0)
+                    .setLayerCount(layer_count)
+                    .setLevelCount(1));
+        auto [result, view] = s_pInstance->m_Device.createImageView(create_info);
+        DIGNIS_VK_CHECK(result);
+        return view;
+    }
+
+
+    vk::ImageView Vulkan::CreateImageColorView2D(
+        const vk::Image  image,
+        const vk::Format format,
+        const uint32_t   base_layer,
+        const uint32_t   layer_count) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        vk::ImageViewCreateInfo create_info{};
+        create_info
+            .setViewType(vk::ImageViewType::e2D)
+            .setFormat(format)
+            .setImage(image)
+            .setSubresourceRange(
+                vk::ImageSubresourceRange{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                    .setBaseArrayLayer(base_layer)
+                    .setBaseMipLevel(0)
+                    .setLayerCount(layer_count)
+                    .setLevelCount(1));
+        auto [result, view] = s_pInstance->m_Device.createImageView(create_info);
+        DIGNIS_VK_CHECK(result);
+        return view;
+    }
+
+    vk::ImageView Vulkan::CreateImageDepthView2D(
+        const vk::Image  image,
+        const vk::Format format,
+        const uint32_t   base_layer,
+        const uint32_t   layer_count) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+        vk::ImageViewCreateInfo create_info{};
+        create_info
+            .setViewType(vk::ImageViewType::e2D)
+            .setFormat(format)
+            .setImage(image)
+            .setSubresourceRange(
+                vk::ImageSubresourceRange{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eDepth)
+                    .setBaseArrayLayer(base_layer)
+                    .setBaseMipLevel(0)
+                    .setLayerCount(layer_count)
+                    .setLevelCount(1));
+        auto [result, view] = s_pInstance->m_Device.createImageView(create_info);
+        DIGNIS_VK_CHECK(result);
+        return view;
+    }
+
     vk::ImageView Vulkan::CreateImageColorViewCube(const vk::Image image, const vk::Format format) {
         DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
         vk::ImageViewCreateInfo create_info{};

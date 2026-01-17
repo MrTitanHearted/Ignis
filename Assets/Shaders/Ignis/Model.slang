@@ -99,6 +99,8 @@ Sampler2D gTextures[];
 [[vk::binding(1, 0)]]
 SamplerCube gSkyboxTexture;
 [[vk::binding(2, 0)]]
+SamplerCube gIrradianceTexture;
+[[vk::binding(3, 0)]]
 StructuredBuffer<Material> gMaterials;
 
 [[vk::binding(0, 1)]]
@@ -221,6 +223,8 @@ float4 fs_main(FragmentInput input) : SV_Target {
     float3 N = normalize(material_normal);
     float3 V = normalize(gDrawPC.ViewPosition - input.FragmentPosition);
 
+    float n_dot_v = max(dot(N, V), 0.0f);
+
     float3 result = float3(0.0f);
 
     float3 f0 = GetF0Metallic(material_albedo, material_metallic);
@@ -230,7 +234,6 @@ float4 fs_main(FragmentInput input) : SV_Target {
         float3 L = normalize(-gDirectionLight.Direction);
         float3 H = normalize(V + L);
 
-        float n_dot_v = max(dot(N, V), 0.0f);
         float n_dot_l = max(dot(N, L), 0.0f);
         float n_dot_h = max(dot(N, H), 0.0f);
         float v_dot_h = max(dot(V, H), 0.0f);
@@ -240,7 +243,7 @@ float4 fs_main(FragmentInput input) : SV_Target {
         float  G = CalculateGeometrySmith(n_dot_v, n_dot_l, material_roughness);
 
         float3 kS = F;
-        float3 kD = 1.0f - kS;
+        float3 kD = (1.0f - kS) * (1.0f - material_metallic);
 
         float3 diffuse_brdf  = EvaluateDiffuseBRDF(kD, material_albedo);
         float3 specular_brdf = EvaluateSpecularBRDF(kS, D, F, G, n_dot_l, n_dot_v);
@@ -256,7 +259,6 @@ float4 fs_main(FragmentInput input) : SV_Target {
         float3 L = normalize(LightToFragment);
         float3 H = normalize(V + L);
 
-        float n_dot_v = max(dot(N, V), 0.0f);
         float n_dot_l = max(dot(N, L), 0.0f);
         float n_dot_h = max(dot(N, H), 0.0f);
         float v_dot_h = max(dot(V, H), 0.0f);
@@ -266,7 +268,7 @@ float4 fs_main(FragmentInput input) : SV_Target {
         float  G = CalculateGeometrySmith(n_dot_v, n_dot_l, material_roughness);
 
         float3 kS = F;
-        float3 kD = 1.0f - kS;
+        float3 kD = (1.0f - kS) * (1.0f - material_metallic);
 
         float3 diffuse_brdf  = EvaluateDiffuseBRDF(kD, material_albedo);
         float3 specular_brdf = EvaluateSpecularBRDF(kS, D, F, G, n_dot_l, n_dot_v);
@@ -284,7 +286,6 @@ float4 fs_main(FragmentInput input) : SV_Target {
         float3 L = normalize(LightToFragment);
         float3 H = normalize(V + L);
 
-        float n_dot_v = max(dot(N, V), 0.0f);
         float n_dot_l = max(dot(N, L), 0.0f);
         float n_dot_h = max(dot(N, H), 0.0f);
         float v_dot_h = max(dot(V, H), 0.0f);
@@ -294,7 +295,7 @@ float4 fs_main(FragmentInput input) : SV_Target {
         float  G = CalculateGeometrySmith(n_dot_v, n_dot_l, material_roughness);
 
         float3 kS = F;
-        float3 kD = 1.0f - kS;
+        float3 kD = (1.0f - kS) * (1.0f - material_metallic);
 
         float3 diffuse_brdf  = EvaluateDiffuseBRDF(kD, material_albedo);
         float3 specular_brdf = EvaluateSpecularBRDF(kS, D, F, G, n_dot_l, n_dot_v);
@@ -310,9 +311,14 @@ float4 fs_main(FragmentInput input) : SV_Target {
         result += EvaluateBRDF(diffuse_brdf, specular_brdf, radiance, n_dot_l);
     }
 
-    // Add ambient occlusion and emission
-    float3 ambient = float3(0.03f) * material_albedo * material_ao;
-    result += ambient + material_emission;
+    // Add ambient occlusion
+    float3 kS         = CalculateFresnelSchlick(n_dot_v, f0);
+    float3 kD         = (1.0f - kS) * (1.0f - material_metallic);
+    float3 irradiance = gIrradianceTexture.Sample(N).rgb;
+    float3 ambient    = kD * irradiance * material_albedo * material_ao;
+
+    result += ambient;
+    result += material_emission;
 
     result = result / (result + 1.0f);
 

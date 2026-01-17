@@ -219,6 +219,8 @@ namespace Ignis {
         void initializeSkybox(const std::array<std::filesystem::path, 6> &skybox_face_paths);
         void releaseSkybox();
 
+        void generateIrradianceMap();
+
         void setSkyboxViewport(FrameGraph::ImageID color_image, FrameGraph::ImageID depth_image);
 
         void readSkyboxImage(FrameGraph::RenderPass &render_pass) const;
@@ -339,7 +341,11 @@ namespace Ignis {
         Vulkan::Image m_SkyboxImage{};
         vk::ImageView m_SkyboxImageView{};
 
+        Vulkan::Image m_IrradianceImage{};
+        vk::ImageView m_IrradianceImageView{};
+
         FrameGraph::ImageID m_FrameGraphSkyboxImage{};
+        FrameGraph::ImageID m_FrameGraphIrradianceImage{};
 
         FrameGraph::BufferInfo m_FrameGraphSkyboxVertexBuffer{};
         FrameGraph::BufferInfo m_FrameGraphSkyboxIndexBuffer{};

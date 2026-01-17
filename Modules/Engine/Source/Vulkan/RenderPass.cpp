@@ -2,10 +2,32 @@
 
 namespace Ignis {
     void Vulkan::BeginRenderPass(
-        const vk::Extent2D                                &extent,
+        const vk::Extent2D &extent,
+
         const vk::ArrayProxy<vk::RenderingAttachmentInfo> &color_attachments,
         const std::optional<vk::RenderingAttachmentInfo>  &depth_attachment_opt,
-        const vk::CommandBuffer                            command_buffer) {
+
+        const uint32_t          view_mask,
+        const vk::CommandBuffer command_buffer) {
+        vk::RenderingInfo rendering_info{};
+        rendering_info
+            .setRenderArea(vk::Rect2D{vk::Offset2D{0, 0}, extent})
+            .setLayerCount(1)
+            .setViewMask(view_mask)
+            .setColorAttachments(color_attachments);
+        if (depth_attachment_opt.has_value()) {
+            rendering_info.setPDepthAttachment(&depth_attachment_opt.value());
+        }
+        command_buffer.beginRendering(rendering_info);
+    }
+
+    void Vulkan::BeginRenderPass(
+        const vk::Extent2D &extent,
+
+        const vk::ArrayProxy<vk::RenderingAttachmentInfo> &color_attachments,
+        const std::optional<vk::RenderingAttachmentInfo>  &depth_attachment_opt,
+
+        const vk::CommandBuffer command_buffer) {
         vk::RenderingInfo rendering_info{};
         rendering_info
             .setRenderArea(vk::Rect2D{vk::Offset2D{0, 0}, extent})

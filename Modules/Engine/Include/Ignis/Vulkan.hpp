@@ -323,6 +323,7 @@ namespace Ignis {
             GraphicsPipelineBuilder &setColorAttachmentFormats(const vk::ArrayProxy<vk::Format> &formats);
             GraphicsPipelineBuilder &setDepthAttachmentFormat(vk::Format format);
             GraphicsPipelineBuilder &setDepthTest(vk::Bool32 depth_write, vk::CompareOp op, float min_bounds = 0.0f, float max_bounds = 1.0f);
+            GraphicsPipelineBuilder &setViewMask(uint32_t view_mask);
             GraphicsPipelineBuilder &setBlendingAdditive();
             GraphicsPipelineBuilder &setBlendingAlphaBlended();
             GraphicsPipelineBuilder &setNoMultisampling();
@@ -549,6 +550,15 @@ namespace Ignis {
             vk::ImageUsageFlags        usage_flags,
             const vk::Extent2D        &extent);
 
+        static vk::ImageView CreateImageColorViewCube(vk::Image image, vk::Format format, uint32_t base_layer);
+        static vk::ImageView CreateImageDepthViewCube(vk::Image image, vk::Format format, uint32_t base_layer);
+
+        static vk::ImageView CreateImageColorView2DArray(vk::Image image, vk::Format format, uint32_t base_layer, uint32_t layer_count);
+        static vk::ImageView CreateImageDepthView2DArray(vk::Image image, vk::Format format, uint32_t base_layer, uint32_t layer_count);
+
+        static vk::ImageView CreateImageColorView2D(vk::Image image, vk::Format format, uint32_t base_layer, uint32_t layer_count);
+        static vk::ImageView CreateImageDepthView2D(vk::Image image, vk::Format format, uint32_t base_layer, uint32_t layer_count);
+
         static vk::ImageView CreateImageColorViewCube(vk::Image image, vk::Format format);
         static vk::ImageView CreateImageDepthViewCube(vk::Image image, vk::Format format);
 
@@ -594,10 +604,22 @@ namespace Ignis {
 
 #pragma region RenderPass
         static void BeginRenderPass(
-            const vk::Extent2D                                &extent,
+            const vk::Extent2D &extent,
+
             const vk::ArrayProxy<vk::RenderingAttachmentInfo> &color_attachments,
             const std::optional<vk::RenderingAttachmentInfo>  &depth_attachment_opt,
-            vk::CommandBuffer                                  command_buffer);
+
+            uint32_t          view_mask,
+            vk::CommandBuffer command_buffer);
+
+        static void BeginRenderPass(
+            const vk::Extent2D &extent,
+
+            const vk::ArrayProxy<vk::RenderingAttachmentInfo> &color_attachments,
+            const std::optional<vk::RenderingAttachmentInfo>  &depth_attachment_opt,
+
+            vk::CommandBuffer command_buffer);
+
         static void EndRenderPass(vk::CommandBuffer command_buffer);
 
         static vk::RenderingAttachmentInfo GetRenderingAttachmentInfo(

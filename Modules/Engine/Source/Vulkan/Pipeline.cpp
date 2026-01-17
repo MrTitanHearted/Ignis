@@ -127,6 +127,11 @@ namespace Ignis {
         return *this;
     }
 
+    Vulkan::GraphicsPipelineBuilder &Vulkan::GraphicsPipelineBuilder::setViewMask(const uint32_t view_mask) {
+        m_Rendering.setViewMask(view_mask);
+        return *this;
+    }
+
     Vulkan::GraphicsPipelineBuilder &Vulkan::GraphicsPipelineBuilder::setBlendingAdditive() {
         m_ColorBlendAttachment
             .setColorWriteMask(vk::ColorComponentFlagBits::eR |
