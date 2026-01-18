@@ -181,7 +181,11 @@ float4 fs_main(FragmentInput input) : SV_Target {
     float material_roughness = material.RoughnessFactor;
 
     if (k_InvalidTexture != material.AlbedoTexture) {
-        material_albedo *= pow(gTextures[material.AlbedoTexture].Sample(input.UV).rgb, 2.2f);
+        float3 texture_albedo = gTextures[material.AlbedoTexture].Sample(input.UV).rgb;
+
+        texture_albedo = pow(texture_albedo, 2.2f);
+
+        material_albedo *= texture_albedo;
     }
     if (k_InvalidTexture != material.NormalTexture) {
         float3 tangent_normal = gTextures[material.NormalTexture].Sample(input.UV).rgb;
