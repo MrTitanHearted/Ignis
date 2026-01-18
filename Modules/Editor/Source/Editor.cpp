@@ -109,7 +109,7 @@ namespace Ignis {
             {},
             vma::MemoryUsage::eGpuOnly,
             {},
-            vk::Format::eR8G8B8A8Srgb,
+            vk::Format::eR8G8B8A8Unorm,
             vk::ImageUsageFlagBits::eColorAttachment |
                 vk::ImageUsageFlagBits::eSampled |
                 vk::ImageUsageFlagBits::eTransferSrc |

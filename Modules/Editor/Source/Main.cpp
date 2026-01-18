@@ -35,12 +35,21 @@ int32_t main(
     engine_settings.WindowSettings.Icon  = "Assets/Icons/IgnisEditor.png";
 
     engine_settings.RenderSettings.SkyboxFacePaths = {
-        "Assets/Cubemaps/sky_34_cubemap_2k/px.png",
-        "Assets/Cubemaps/sky_34_cubemap_2k/nx.png",
-        "Assets/Cubemaps/sky_34_cubemap_2k/py.png",
-        "Assets/Cubemaps/sky_34_cubemap_2k/ny.png",
-        "Assets/Cubemaps/sky_34_cubemap_2k/pz.png",
-        "Assets/Cubemaps/sky_34_cubemap_2k/nz.png",
+        "Assets/Textures/black_1x1.png",
+        "Assets/Textures/black_1x1.png",
+        "Assets/Textures/black_1x1.png",
+        "Assets/Textures/black_1x1.png",
+        "Assets/Textures/black_1x1.png",
+        "Assets/Textures/black_1x1.png",
+    };
+
+    engine_settings.RenderSettings.SkyboxFacePaths = {
+        "Assets/Cubemaps/skybox_anime_sky/px.png",
+        "Assets/Cubemaps/skybox_anime_sky/nx.png",
+        "Assets/Cubemaps/skybox_anime_sky/py.png",
+        "Assets/Cubemaps/skybox_anime_sky/ny.png",
+        "Assets/Cubemaps/skybox_anime_sky/pz.png",
+        "Assets/Cubemaps/skybox_anime_sky/nz.png",
     };
 
     engine_settings.UISystem = std::make_unique<Ignis::ImGuiSystem>();

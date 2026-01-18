@@ -117,7 +117,7 @@ namespace Ignis {
     }
 
     glm::mat4 Camera::getProjection(const float aspect, const float near, const float far) const {
-        return glm::perspective(m_Zoom, aspect, near, far);
+        return glm::perspective(glm::radians(m_Zoom), aspect, near, far);
     }
 
     void Camera::updateCameraVectors() {

@@ -74,6 +74,8 @@ namespace Ignis {
 
         m_Sampler = Vulkan::CreateSampler(
             vk::SamplerCreateInfo()
+                .setMinLod(0.0f)
+                .setMaxLod(vk::LodClampNone)
                 .setAnisotropyEnable(vk::True)
                 .setMaxAnisotropy(16.0f));
 

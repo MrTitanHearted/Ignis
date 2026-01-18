@@ -44,9 +44,9 @@ namespace Ignis {
                 if (ImGui::TreeNodeEx(model_label.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
                     // Add Instance Section
                     if (ImGui::TreeNodeEx("Add Instance", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        static glm::vec3 add_position{0.0f};
-                        static glm::vec3 add_rotation{0.0f};
-                        static float     add_scale = 1.0f;
+                        auto &add_position = model_state.Position;
+                        auto &add_rotation = model_state.Rotation;
+                        auto &add_scale    = model_state.Scale;
 
                         ImGui::DragFloat3("Position", glm::value_ptr(add_position), 0.1f);
                         ImGui::DragFloat3("Rotation", glm::value_ptr(add_rotation), 1.0f);
@@ -64,7 +64,7 @@ namespace Ignis {
                                 add_position,
                                 add_rotation,
                                 add_scale,
-                                true};
+                            };
                         }
 
                         ImGui::TreePop();
@@ -79,7 +79,7 @@ namespace Ignis {
                             for (uint32_t instance_index = 0; instance_index < model_state.Instances.size(); ++instance_index) {
                                 const auto &instance = model_state.Instances[instance_index];
 
-                                auto &[position, rotation, scale, initialized] = state.InstanceToUIState[instance];
+                                auto &[position, rotation, scale] = state.InstanceToUIState[instance];
 
                                 ImGui::PushID(static_cast<int32_t>(instance_index));
 

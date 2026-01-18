@@ -219,6 +219,8 @@ namespace Ignis {
         void initializeSkybox(const std::array<std::filesystem::path, 6> &skybox_face_paths);
         void releaseSkybox();
 
+        void generateBRDFLUTMap();
+        void generatePrefilterMap();
         void generateIrradianceMap();
 
         void setSkyboxViewport(FrameGraph::ImageID color_image, FrameGraph::ImageID depth_image);
@@ -341,10 +343,18 @@ namespace Ignis {
         Vulkan::Image m_SkyboxImage{};
         vk::ImageView m_SkyboxImageView{};
 
+        Vulkan::Image m_BRDFLUTImage{};
+        vk::ImageView m_BRDFLUTImageView{};
+
+        Vulkan::Image m_PrefilterImage{};
+        vk::ImageView m_PrefilterImageView{};
+
         Vulkan::Image m_IrradianceImage{};
         vk::ImageView m_IrradianceImageView{};
 
         FrameGraph::ImageID m_FrameGraphSkyboxImage{};
+        FrameGraph::ImageID m_FrameGraphBRDFLUTImage{};
+        FrameGraph::ImageID m_FrameGraphPrefilterImage{};
         FrameGraph::ImageID m_FrameGraphIrradianceImage{};
 
         FrameGraph::BufferInfo m_FrameGraphSkyboxVertexBuffer{};

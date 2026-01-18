@@ -38,6 +38,9 @@ const static float3 gCubeVertices[36] =
 [[vk::binding(0, 0)]]
 SamplerCube gSkybox;
 
+[[vk::push_constant]]
+float gRoughness;
+
 [shader("vertex")]
 VertexOutput vs_main(
     uint vertex_id: SV_VertexID,
@@ -75,29 +78,61 @@ VertexOutput vs_main(
 [shader("fragment")]
 float4 fs_main([[vk::location(0)]] float3 uvw) : SV_Target {
     float3 N = normalize(uvw);
+    float3 R = N;
+    float3 V = R;
 
-    float3 irradiance = float3(0.0f);
+    float3 prefilter_color = float3(0.0f);
 
-    float3 up    = float3(0.0f, 1.0f, 0.0f);
-    float3 right = normalize(cross(up, N));
+    const uint SAMPLE_COUNT = 1024u;
 
-    up = normalize(cross(N, right));
+    float total_weight = 0.0f;
 
-    float sample_delta = 0.02f;
-    float sample_count = 0.0f;
+    for (uint i = 0; i < SAMPLE_COUNT; i++) {
+        float2 Xi = CalculateHammersley(i, SAMPLE_COUNT);
+        float3 H  = ImportanceSampleGGX(Xi, N, gRoughness);
+        float3 L  = normalize(2.0f * dot(V, H) * H - V);
 
-    for (float phi = 0.0f; phi < 2.0f * k_PI; phi += sample_delta) {
-        for (float theta = 0.0f; theta < 0.5f * k_PI; theta += sample_delta) {
-            float3 tangent_sample = float3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
-            float3 sample_vector  = tangent_sample.x * right + tangent_sample.y * up + tangent_sample.z * N;
-
-            irradiance += gSkybox.Sample(sample_vector).rgb * cos(theta) * sin(theta);
-
-            sample_count += 1.0f;
+        float n_dot_l = max(dot(N, L), 0.0f);
+        if (n_dot_l > 0.0f) {
+            prefilter_color += gSkybox.Sample(L).rgb * n_dot_l;
+            total_weight += n_dot_l;
         }
     }
 
-    irradiance = k_PI * irradiance / sample_count;
+    prefilter_color = prefilter_color / total_weight;
 
-    return float4(irradiance, 1.0f);
+    return float4(prefilter_color, 1.0f);
+}
+
+float3 ImportanceSampleGGX(float2 Xi, float3 N, float roughness) {
+    float a = roughness * roughness;
+
+    float phi       = 2.0f * k_PI * Xi.x;
+    float cos_theta = sqrt((1.0f - Xi.y) / (1.0f + (a * a - 1.0f) * Xi.y));
+    float sin_theta = sqrt(1.0f - cos_theta * cos_theta);
+
+    float3 H;
+    H.x = cos(phi) * sin_theta;
+    H.y = sin(phi) * sin_theta;
+    H.z = cos_theta;
+
+    float3 up        = abs(N.z) < 0.999999f ? float3(0.0f, 0.0f, 1.0f) : float3(1.0f, 0.0f, 0.0f);
+    float3 tangent   = normalize(cross(up, N));
+    float3 bitangent = cross(N, tangent);
+
+    float3 sample_vector = tangent * H.x + bitangent * H.y + N * H.z;
+    return normalize(sample_vector);
+}
+
+float2 CalculateHammersley(uint i, uint N) {
+    return float2(float(i) / float(N), CalculateRadianceInverseVdC(i));
+}
+
+float CalculateRadianceInverseVdC(uint bits) {
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    return float(bits) * 2.3283064365386963e-10;  // / 0x100000000
 }

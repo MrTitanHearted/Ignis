@@ -97,10 +97,12 @@ struct Instance {
 [[vk::binding(0, 0)]]
 Sampler2D gTextures[];
 [[vk::binding(1, 0)]]
-SamplerCube gSkyboxTexture;
+Sampler2D gBRDFLUTTexture;
 [[vk::binding(2, 0)]]
-SamplerCube gIrradianceTexture;
+SamplerCube gPrefilterTexture;
 [[vk::binding(3, 0)]]
+SamplerCube gIrradianceTexture;
+[[vk::binding(4, 0)]]
 StructuredBuffer<Material> gMaterials;
 
 [[vk::binding(0, 1)]]
@@ -179,21 +181,21 @@ float4 fs_main(FragmentInput input) : SV_Target {
     float material_roughness = material.RoughnessFactor;
 
     if (k_InvalidTexture != material.AlbedoTexture) {
-        material_albedo *= gTextures[material.AlbedoTexture].Sample(input.UV).rgb;
+        material_albedo *= pow(gTextures[material.AlbedoTexture].Sample(input.UV).rgb, 2.2f);
     }
     if (k_InvalidTexture != material.NormalTexture) {
         float3 tangent_normal = gTextures[material.NormalTexture].Sample(input.UV).rgb;
 
         tangent_normal = normalize(tangent_normal * 2.0f - 1.0f);
 
+        float handedness = input.Tangent.w;
+
         float3 N = normalize(input.Normal);
         float3 T = normalize(input.Tangent.xyz);
 
         T = normalize(T - N * dot(N, T));
 
-        float handedness = input.Tangent.w;
-
-        float3 B = -normalize(handedness * cross(T, N));
+        float3 B = normalize(handedness * cross(N, T));
 
         float3x3 TBN = transpose(float3x3(T, B, N));
 
@@ -230,7 +232,9 @@ float4 fs_main(FragmentInput input) : SV_Target {
     float3 f0 = GetF0Metallic(material_albedo, material_metallic);
 
     // Directional light
-    {
+    if (length(gDirectionLight.Color) > 0.0f &&
+        length(gDirectionLight.Direction) > 0.0f &&
+        gDirectionLight.Power > 0.0f) {
         float3 L = normalize(-gDirectionLight.Direction);
         float3 H = normalize(V + L);
 
@@ -239,14 +243,14 @@ float4 fs_main(FragmentInput input) : SV_Target {
         float v_dot_h = max(dot(V, H), 0.0f);
 
         float  D = CalculateDistributionGGX(n_dot_h, material_roughness);
-        float3 F = CalculateFresnelSchlick(v_dot_h, f0);
+        float3 F = CalculateFresnelDotpoint7(v_dot_h, f0);
         float  G = CalculateGeometrySmith(n_dot_v, n_dot_l, material_roughness);
 
         float3 kS = F;
         float3 kD = (1.0f - kS) * (1.0f - material_metallic);
 
         float3 diffuse_brdf  = EvaluateDiffuseBRDF(kD, material_albedo);
-        float3 specular_brdf = EvaluateSpecularBRDF(kS, D, F, G, n_dot_l, n_dot_v);
+        float3 specular_brdf = EvaluateSpecularBRDF(D, F, G, n_dot_l, n_dot_v);
 
         float3 radiance = gDirectionLight.Color * gDirectionLight.Power;
 
@@ -264,18 +268,19 @@ float4 fs_main(FragmentInput input) : SV_Target {
         float v_dot_h = max(dot(V, H), 0.0f);
 
         float  D = CalculateDistributionGGX(n_dot_h, material_roughness);
-        float3 F = CalculateFresnelSchlick(v_dot_h, f0);
+        float3 F = CalculateFresnelDotpoint7(v_dot_h, f0);
         float  G = CalculateGeometrySmith(n_dot_v, n_dot_l, material_roughness);
 
         float3 kS = F;
         float3 kD = (1.0f - kS) * (1.0f - material_metallic);
 
         float3 diffuse_brdf  = EvaluateDiffuseBRDF(kD, material_albedo);
-        float3 specular_brdf = EvaluateSpecularBRDF(kS, D, F, G, n_dot_l, n_dot_v);
+        float3 specular_brdf = EvaluateSpecularBRDF(D, F, G, n_dot_l, n_dot_v);
 
-        float attenuation = length(LightToFragment);
+        float distance    = length(LightToFragment);
+        float attenuation = 1.0f / (distance * distance);
 
-        float3 radiance = gPointLights[i].Color * gPointLights[i].Power / attenuation * attenuation;
+        float3 radiance = gPointLights[i].Color * gPointLights[i].Power * attenuation;
 
         result += EvaluateBRDF(diffuse_brdf, specular_brdf, radiance, n_dot_l);
     }
@@ -291,36 +296,54 @@ float4 fs_main(FragmentInput input) : SV_Target {
         float v_dot_h = max(dot(V, H), 0.0f);
 
         float  D = CalculateDistributionGGX(n_dot_h, material_roughness);
-        float3 F = CalculateFresnelSchlick(v_dot_h, f0);
+        float3 F = CalculateFresnelDotpoint7(v_dot_h, f0);
         float  G = CalculateGeometrySmith(n_dot_v, n_dot_l, material_roughness);
 
         float3 kS = F;
         float3 kD = (1.0f - kS) * (1.0f - material_metallic);
 
         float3 diffuse_brdf  = EvaluateDiffuseBRDF(kD, material_albedo);
-        float3 specular_brdf = EvaluateSpecularBRDF(kS, D, F, G, n_dot_l, n_dot_v);
+        float3 specular_brdf = EvaluateSpecularBRDF(D, F, G, n_dot_l, n_dot_v);
 
         float theta     = dot(L, normalize(-gSpotLights[i].Direction));
         float epsilon   = gSpotLights[i].CutOff - gSpotLights[i].OuterCutOff;
         float intensity = clamp((theta - gSpotLights[i].OuterCutOff) / epsilon, 0.0f, 1.0f);
 
-        float attenuation = length(LightToFragment);
+        float distance    = length(LightToFragment);
+        float attenuation = 1.0f / (distance * distance);
 
-        float3 radiance = gSpotLights[i].Color * gSpotLights[i].Power * intensity / attenuation * attenuation;
+        float3 radiance = gSpotLights[i].Color * gSpotLights[i].Power * intensity * attenuation;
 
         result += EvaluateBRDF(diffuse_brdf, specular_brdf, radiance, n_dot_l);
     }
 
     // Add ambient occlusion
-    float3 kS         = CalculateFresnelSchlick(n_dot_v, f0);
-    float3 kD         = (1.0f - kS) * (1.0f - material_metallic);
-    float3 irradiance = gIrradianceTexture.Sample(N).rgb;
-    float3 ambient    = kD * irradiance * material_albedo * material_ao;
+    {
+        float3 R = reflect(-V, N);
+        float3 F = CalculateFresnelSchlickRoughness(n_dot_v, f0, material_roughness);
 
-    result += ambient;
+        float3 kS = F;
+        float3 kD = (1.0f - kS) * (1.0f - material_metallic);
+
+        const float MAX_REFLECTION_LOD = 8.0f;
+
+        float3 irradiance = gIrradianceTexture.Sample(N).rgb;
+        float3 diffuse    = irradiance * material_albedo;
+
+        float2 brdf = gBRDFLUTTexture.Sample(float2(n_dot_v, material_roughness)).rg;
+
+        float3 prefilter_color = gPrefilterTexture.SampleLevel(R, material_roughness * MAX_REFLECTION_LOD).rgb;
+        float3 specular        = prefilter_color * (F * brdf.x + brdf.y);
+
+        float3 ambient = (kD * diffuse + specular) * material_ao;
+
+        result += ambient;
+    }
+
     result += material_emission;
 
-    result = result / (result + 1.0f);
+    result = ApplyToneMappingACES(result);
+    result = ApplyGammaCorrection(result, 2.2f);
 
     return float4(result, 1.0f);
 }
@@ -340,13 +363,12 @@ float3 EvaluateDiffuseBRDF(
 }
 
 float3 EvaluateSpecularBRDF(
-    float3 kS,
     float  D,
     float3 F,
     float  G,
     float  n_dot_l,
     float  n_dot_v) {
-    return kS * D * G * F / max(4 * n_dot_v * n_dot_l, 0.000001f);
+    return D * G * F / max(4 * n_dot_v * n_dot_l, 0.001f);
 }
 
 float CalculateDistributionGGX(float n_dot_h, float roughness) {
@@ -360,10 +382,10 @@ float CalculateDistributionGGX(float n_dot_h, float roughness) {
 }
 
 float CalculateGeometrySmith(float n_dot_v, float n_dot_l, float roughness) {
-    float schlick_light = CalculateGeometrySchlickGGX(n_dot_l, roughness);
     float schlick_view  = CalculateGeometrySchlickGGX(n_dot_v, roughness);
+    float schlick_light = CalculateGeometrySchlickGGX(n_dot_l, roughness);
 
-    return schlick_light * schlick_view;
+    return schlick_view * schlick_light;
 }
 
 float CalculateGeometrySchlickGGX(float dot_product, float roughness) {
@@ -375,11 +397,40 @@ float CalculateGeometrySchlickGGX(float dot_product, float roughness) {
     return dot_product / denominator;
 }
 
-float3 CalculateFresnelSchlick(float v_dot_h, float3 f0) {
-    return f0 + (1.0f - f0) * pow(clamp(1.0f - v_dot_h, 0.0f, 1.0f), 5.0f);
+float3 CalculateFresnelSchlick(float a_dot_b, float3 f0) {
+    return f0 + (1.0f - f0) * pow(1.0f - a_dot_b, 5.0f);
+}
+
+float3 CalculateFresnelSchlickRoughness(float a_dot_b, float3 f0, float roughness) {
+    return f0 + (max(float3(1.0f - roughness), f0) - f0) * pow(1.0f - a_dot_b, 5.0f);
+}
+
+float3 CalculateFresnelDotpoint7(float a_dot_b, float3 f0) {
+    return f0 + (1.0f - a_dot_b - f0) * pow(1.0f - a_dot_b, 4.0f);
 }
 
 float3 GetF0Metallic(float3 albedo, float metallic) {
     return lerp(float3(0.04f), albedo, metallic);
+}
+
+float3 ApplyGammaCorrection(float3 color, float gamma) {
+    return pow(color, float3(1.0f / gamma));
+}
+
+float3 ApplyToneMappingACES(float3 color) {
+    const float3x3 m1 = float3x3(
+        0.59719, 0.35458, 0.04823,
+        0.07600, 0.90834, 0.01566,
+        0.02840, 0.13383, 0.83777);
+
+    const float3x3 m2 = float3x3(
+        1.60475, -0.53108, -0.07367,
+        -0.10208, 1.10813, -0.00605,
+        -0.00327, -0.07276, 1.07602);
+
+    float3 v = mul(m1, color);
+    float3 a = v * (v + 0.0245786) - 0.000090537;
+    float3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
+    return saturate(mul(m2, a / b));
 }
 

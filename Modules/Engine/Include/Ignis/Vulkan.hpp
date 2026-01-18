@@ -44,6 +44,8 @@ namespace Ignis {
 
             vk::ImageUsageFlags Usage;
 
+            uint32_t MipLevelCount;
+
             vk::ImageCreateFlags CreateFlags;
             vma::MemoryUsage     MemoryUsage;
 
@@ -105,7 +107,6 @@ namespace Ignis {
         };
 
 #pragma endregion
-
 #pragma region Descriptor
 
         class DescriptorSetLayoutBuilder {
@@ -304,7 +305,6 @@ namespace Ignis {
         };
 
 #pragma endregion
-
 #pragma region Pipeline
 
         class GraphicsPipelineBuilder {
@@ -421,7 +421,6 @@ namespace Ignis {
             uint64_t                   size,
             vk::BufferUsageFlags       usage_flags);
 #pragma endregion
-
 #pragma region Command
         static void DestroyCommandPool(vk::CommandPool command_pool);
 
@@ -495,7 +494,6 @@ namespace Ignis {
         static vk::CommandBufferSubmitInfo GetCommandBufferSubmitInfo(vk::CommandBuffer command_buffer);
 
 #pragma endregion
-
 #pragma region Descriptor
         static void DestroyDescriptorPool(vk::DescriptorPool descriptor_pool);
         static void DestroyDescriptorSetLayout(vk::DescriptorSetLayout layout);
@@ -521,10 +519,18 @@ namespace Ignis {
             vk::DescriptorSetLayout layout,
             vk::DescriptorPool      pool);
 #pragma endregion
-
 #pragma region Image
         static void DestroyImage(const Image &image);
         static void DestroyImageView(vk::ImageView view);
+
+        static Image AllocateImageCube(
+            vma::AllocationCreateFlags allocation_flags,
+            vma::MemoryUsage           memory_usage,
+            vk::ImageCreateFlagBits    image_flags,
+            vk::Format                 format,
+            vk::ImageUsageFlags        usage_flags,
+            uint32_t                   mip_level_count,
+            const vk::Extent2D        &extent);
 
         static Image AllocateImageCube(
             vma::AllocationCreateFlags allocation_flags,
@@ -553,11 +559,17 @@ namespace Ignis {
         static vk::ImageView CreateImageColorViewCube(vk::Image image, vk::Format format, uint32_t base_layer);
         static vk::ImageView CreateImageDepthViewCube(vk::Image image, vk::Format format, uint32_t base_layer);
 
+        static vk::ImageView CreateImageColorView2DArray(vk::Image image, vk::Format format, uint32_t base_mip_level, uint32_t mip_level_count, uint32_t base_layer, uint32_t layer_count);
+        static vk::ImageView CreateImageDepthView2DArray(vk::Image image, vk::Format format, uint32_t base_mip_level, uint32_t mip_level_count, uint32_t base_layer, uint32_t layer_count);
+
         static vk::ImageView CreateImageColorView2DArray(vk::Image image, vk::Format format, uint32_t base_layer, uint32_t layer_count);
         static vk::ImageView CreateImageDepthView2DArray(vk::Image image, vk::Format format, uint32_t base_layer, uint32_t layer_count);
 
         static vk::ImageView CreateImageColorView2D(vk::Image image, vk::Format format, uint32_t base_layer, uint32_t layer_count);
         static vk::ImageView CreateImageDepthView2D(vk::Image image, vk::Format format, uint32_t base_layer, uint32_t layer_count);
+
+        static vk::ImageView CreateImageColorViewCube(vk::Image image, vk::Format format, uint32_t base_mip_level, uint32_t mip_level_count);
+        static vk::ImageView CreateImageDepthViewCube(vk::Image image, vk::Format format, uint32_t base_mip_level, uint32_t mip_level_count);
 
         static vk::ImageView CreateImageColorViewCube(vk::Image image, vk::Format format);
         static vk::ImageView CreateImageDepthViewCube(vk::Image image, vk::Format format);
@@ -571,7 +583,6 @@ namespace Ignis {
         static vk::ImageAspectFlags GetImageAspectMask(vk::ImageLayout layout);
 
 #pragma endregion
-
 #pragma region Pipeline
         static void DestroyPipelineLayout(vk::PipelineLayout layout);
         static void DestroyPipeline(vk::Pipeline pipeline);
@@ -586,7 +597,6 @@ namespace Ignis {
             vk::ShaderModule        shader_module,
             vk::PipelineLayout      layout);
 #pragma endregion
-
 #pragma region Queue
         static vk::Result Present(
             const vk::ArrayProxy<vk::Semaphore> &wait_semaphores,
@@ -601,7 +611,6 @@ namespace Ignis {
             vk::Fence fence,
             vk::Queue queue);
 #pragma endregion
-
 #pragma region RenderPass
         static void BeginRenderPass(
             const vk::Extent2D &extent,
@@ -629,19 +638,16 @@ namespace Ignis {
             vk::AttachmentStoreOp store_op,
             const vk::ClearValue &clear_value);
 #pragma endregion
-
 #pragma region Sampler
         static void DestroySampler(vk::Sampler sampler);
 
         static vk::Sampler CreateSampler(const vk::SamplerCreateInfo &create_info);
 #pragma endregion
-
 #pragma region Shader
         static void DestroyShaderModule(vk::ShaderModule shader_module);
 
         static vk::ShaderModule CreateShaderModuleFromSPV(std::span<uint32_t> code);
 #pragma endregion
-
 #pragma region Synchronization
         static void DestroyFence(vk::Fence fence);
         static void DestroySemaphore(vk::Semaphore semaphore);

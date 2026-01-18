@@ -21,8 +21,6 @@ namespace Ignis {
             glm::vec3 Position{0.0f};
             glm::vec3 Rotation{0.0f};
             glm::f32  Scale{1.0f};
-
-            bool IsInitialized{false};
         };
 
         struct ModelPanelState {
