@@ -41,8 +41,8 @@ VertexOutput vs_main(
 float4 fs_main(FragmentInput input) : SV_Target {
     float3 color = gSkybox.Sample(input.UVW).rgb;
 
-    color = ApplyToneMappingACES(color);
-    color = ApplyGammaCorrection(color, 2.2f);
+    // color = ApplyToneMappingACES(color);
+    // color = ApplyGammaCorrection(color, 2.2f);
 
     return float4(color, 1.0f);
 }

@@ -66,7 +66,7 @@ namespace Ignis {
         m_ModelPipelineLayout = Vulkan::CreatePipelineLayout(
             vk::PushConstantRange{
                 vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                0, sizeof(CameraPC) + sizeof(ModelID)},
+                0, sizeof(CameraPC) + sizeof(ModelID) + sizeof(glm::f32)},
             {m_MaterialDescriptorLayout, m_LightDescriptorLayout, m_ModelDescriptorLayout});
 
         m_ModelDescriptorSet = Vulkan::AllocateDescriptorSet(m_ModelDescriptorLayout, m_DescriptorPool);
@@ -154,9 +154,11 @@ namespace Ignis {
     }
 
     void Render::onModelDraw(const vk::CommandBuffer command_buffer) {
-        const CameraPC camera_pc{
+        const DrawPC draw_pc{
             m_Camera.Projection * m_Camera.View,
             m_Camera.Position,
+            static_cast<glm::f32>(m_PrefilterImage.MipLevelCount - 1),
+            k_InvalidModelID,
         };
 
         command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_ModelPipeline);
@@ -169,14 +171,14 @@ namespace Ignis {
             m_ModelPipelineLayout,
             vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             0,
-            sizeof(CameraPC),
-            &camera_pc);
+            sizeof(DrawPC),
+            &draw_pc);
 
         for (const auto &[model_id, model] : m_Models) {
             command_buffer.pushConstants(
                 m_ModelPipelineLayout,
                 vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                sizeof(CameraPC),
+                offsetof(DrawPC, Model),
                 sizeof(ModelID),
                 &model_id);
             command_buffer.bindIndexBuffer(model.IndexBuffer.Handle, 0, vk::IndexType::eUint32);
@@ -783,15 +785,15 @@ namespace Ignis {
         if (AI_SUCCESS != ai_material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness_factor))
             roughness_factor = 1.0f;
 
-        auto albedo_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_BASE_COLOR, false);
+        auto albedo_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_BASE_COLOR, true);
         if (k_InvalidTextureID == albedo_texture) {
-            albedo_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_DIFFUSE, false);
+            albedo_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_DIFFUSE, true);
         }
         auto normal_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_NORMALS, false);
         if (k_InvalidTextureID == normal_texture) {
             normal_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_HEIGHT, false);
         }
-        const auto emissive_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_EMISSIVE, false);
+        const auto emissive_texture = processTexture(directory, ai_scene, ai_material, aiTextureType_EMISSIVE, true);
         const auto ambient_occlusion_texture =
             processTexture(directory, ai_scene, ai_material, aiTextureType_AMBIENT_OCCLUSION, false);
         const auto metallic_roughness_texture =
@@ -809,14 +811,18 @@ namespace Ignis {
         material.EmissiveFactor  = AssimpToGlm(emissive_factor);
         material.RoughnessFactor = roughness_factor;
 
-        material.AlbedoTexture           = albedo_texture;
-        material.NormalTexture           = normal_texture;
-        material.EmissiveTexture         = emissive_texture;
-        material.AmbientOcclusionTexture = ambient_occlusion_texture;
+        material.AlbedoTexture           = k_InvalidTextureID == albedo_texture ? addWhiteTexture() : albedo_texture;
+        material.NormalTexture           = k_InvalidTextureID == normal_texture ? addNormalTexture() : normal_texture;
+        material.EmissiveTexture         = k_InvalidTextureID == emissive_texture ? addBlackTexture() : emissive_texture;
+        material.AmbientOcclusionTexture = k_InvalidTextureID == ambient_occlusion_texture ? addWhiteTexture() : ambient_occlusion_texture;
 
-        material.MetallicRoughnessTexture = metallic_roughness_texture;
-        material.MetallicTexture          = metallic_texture;
-        material.RoughnessTexture         = roughness_texture;
+        material.MetallicRoughnessTexture =
+            k_InvalidTextureID == metallic_roughness_texture
+                ? addMetallicRoughnessTexture()
+                : metallic_roughness_texture;
+
+        material.MetallicTexture  = k_InvalidTextureID == metallic_texture ? addWhiteTexture() : metallic_texture;
+        material.RoughnessTexture = k_InvalidTextureID == roughness_texture ? addWhiteTexture() : roughness_texture;
 
         const MaterialID id = addMaterial(material);
         m_LoadedMaterials.emplace(material_path, id);

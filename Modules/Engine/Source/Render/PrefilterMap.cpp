@@ -1,10 +1,7 @@
 #include <Ignis/Render.hpp>
 
-#define MIP_LEVEL_COUNT 9
-#define IMAGE_SIZE 256
-
 namespace Ignis {
-    void Render::generatePrefilterMap() {
+    void Render::generatePrefilterMap(const Settings &settings) {
         const FileAsset shader_file = FileAsset::LoadBinaryFromPath("Assets/Shaders/Ignis/GeneratePrefilterMap.spv").value();
 
         std::vector<uint32_t> shader_code{};
@@ -14,19 +11,20 @@ namespace Ignis {
 
         const vk::ShaderModule shader_module = Vulkan::CreateShaderModuleFromSPV(shader_code);
 
-        m_PrefilterImage = Vulkan::AllocateImageCube(
+        const uint32_t &gImageSize = settings.PrefilterResolution;
+
+        m_PrefilterImage = Vulkan::AllocateImageCubeWithMipLevels(
             {}, vma::MemoryUsage::eGpuOnly,
             vk::ImageCreateFlagBits::eCubeCompatible,
             vk::Format::eR16G16B16A16Sfloat,
             vk::ImageUsageFlagBits::eColorAttachment |
                 vk::ImageUsageFlagBits::eSampled,
-            MIP_LEVEL_COUNT,
-            {IMAGE_SIZE, IMAGE_SIZE});
+            {gImageSize, gImageSize});
 
         m_PrefilterImageView = Vulkan::CreateImageColorViewCube(
             m_PrefilterImage.Handle,
             m_PrefilterImage.Format,
-            0, MIP_LEVEL_COUNT);
+            0, m_PrefilterImage.MipLevelCount);
 
         const vk::DescriptorPool descriptor_pool =
             Vulkan::CreateDescriptorPool(
@@ -39,7 +37,7 @@ namespace Ignis {
                 .build();
 
         const vk::PipelineLayout pipeline_layout = Vulkan::CreatePipelineLayout(
-            {vk::PushConstantRange{vk::ShaderStageFlagBits::eFragment, 0, sizeof(glm::f32)}},
+            {vk::PushConstantRange{vk::ShaderStageFlagBits::eFragment, 0, sizeof(glm::vec2)}},
             {set_layout});
 
         const vk::Pipeline pipeline =
@@ -60,9 +58,10 @@ namespace Ignis {
         const vk::DescriptorSet descriptor_set =
             Vulkan::AllocateDescriptorSet(set_layout, descriptor_pool);
 
-        std::array<vk::ImageView, MIP_LEVEL_COUNT> render_image_views{};
+        std::vector<vk::ImageView> render_image_views{};
+        render_image_views.resize(m_PrefilterImage.MipLevelCount);
 
-        for (uint32_t i = 0; i < MIP_LEVEL_COUNT; i++) {
+        for (uint32_t i = 0; i < m_PrefilterImage.MipLevelCount; i++) {
             render_image_views[i] = Vulkan::CreateImageColorView2DArray(
                 m_PrefilterImage.Handle,
                 m_PrefilterImage.Format,
@@ -84,6 +83,8 @@ namespace Ignis {
             .update(descriptor_set);
 
         Vulkan::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
+            Vulkan::BeginDebugUtilsLabel(command_buffer, "Ignis::Render::GeneratePrefilterMap", {1.0f, 1.0f, 0.0f, 1.0f});
+
             Vulkan::BarrierMerger merger{};
 
             merger.putImageBarrier(
@@ -96,12 +97,14 @@ namespace Ignis {
                 vk::AccessFlagBits2::eColorAttachmentWrite);
             merger.flushBarriers(command_buffer);
 
-            for (uint32_t i = 0; i < MIP_LEVEL_COUNT; i++) {
+            for (uint32_t i = 0; i < m_PrefilterImage.MipLevelCount; i++) {
                 const auto &render_image_view = render_image_views[i];
 
-                const auto mip_size = static_cast<uint32_t>(IMAGE_SIZE * glm::pow(0.5f, i));
+                const auto mip_size = static_cast<uint32_t>(gImageSize * glm::pow(0.5f, i));
 
-                const auto roughness = static_cast<glm::f32>(i) / (static_cast<glm::f32>(MIP_LEVEL_COUNT) - 1.0f);
+                const auto roughness = static_cast<glm::f32>(i) / (static_cast<glm::f32>(m_PrefilterImage.MipLevelCount) - 1.0f);
+
+                const glm::vec2 pc{roughness, settings.SkyboxResolution};
 
                 Vulkan::BeginRenderPass(
                     {mip_size, mip_size},
@@ -136,8 +139,8 @@ namespace Ignis {
                     pipeline_layout,
                     vk::ShaderStageFlagBits::eFragment,
                     0,
-                    sizeof(glm::f32),
-                    &roughness);
+                    sizeof(glm::vec2),
+                    &pc);
 
                 command_buffer.draw(36, 1, 0, 0);
 
@@ -153,6 +156,8 @@ namespace Ignis {
                 vk::PipelineStageFlagBits2::eFragmentShader,
                 vk::AccessFlagBits2::eShaderRead);
             merger.flushBarriers(command_buffer);
+
+            Vulkan::EndDebugUtilsLabel(command_buffer);
         });
 
         Vulkan::DestroySampler(sampler);

@@ -85,6 +85,30 @@ namespace Ignis {
                 vk::Image               image,
                 vk::ImageLayout         old_layout,
                 vk::ImageLayout         new_layout,
+                uint32_t                base_mip_level,
+                uint32_t                mip_level_count,
+                uint32_t                base_array_layer,
+                uint32_t                array_layer_count,
+                vk::PipelineStageFlags2 src_stage,
+                vk::AccessFlags2        src_access,
+                vk::PipelineStageFlags2 dst_stage,
+                vk::AccessFlags2        dst_access);
+
+            void putImageBarrier(
+                vk::Image               image,
+                vk::ImageLayout         old_layout,
+                vk::ImageLayout         new_layout,
+                uint32_t                base_mip_level,
+                uint32_t                base_array_layer,
+                vk::PipelineStageFlags2 src_stage,
+                vk::AccessFlags2        src_access,
+                vk::PipelineStageFlags2 dst_stage,
+                vk::AccessFlags2        dst_access);
+
+            void putImageBarrier(
+                vk::Image               image,
+                vk::ImageLayout         old_layout,
+                vk::ImageLayout         new_layout,
                 vk::PipelineStageFlags2 src_stage,
                 vk::AccessFlags2        src_access,
                 vk::PipelineStageFlags2 dst_stage,
@@ -444,12 +468,38 @@ namespace Ignis {
         static void EndCommandBuffer(vk::CommandBuffer command_buffer);
 
         static void BlitImageToImage(
+            vk::Image src_image,
+            vk::Image dst_image,
+
+            uint32_t src_base_mip_level,
+            uint32_t dst_base_mip_level,
+            uint32_t src_base_array_layer,
+            uint32_t dst_base_array_layer,
+            uint32_t src_array_layer_count,
+            uint32_t dst_array_layer_count,
+
+            const vk::Offset3D &src_offset,
+            const vk::Offset3D &dst_offset,
+            const vk::Extent3D &src_extent,
+            const vk::Extent3D &dst_extent,
+
+            vk::CommandBuffer command_buffer);
+
+        static void BlitImageToImage(
             vk::Image           src_image,
             vk::Image           dst_image,
             const vk::Offset3D &src_offset,
             const vk::Offset3D &dst_offset,
             const vk::Extent3D &src_extent,
             const vk::Extent3D &dst_extent,
+            vk::CommandBuffer   command_buffer);
+
+        static void GenerateImageCubeMipLevels(
+            vk::Image           image,
+            vk::ImageLayout     old_layout,
+            vk::ImageLayout     new_layout,
+            uint32_t            mip_level_count,
+            const vk::Extent2D &extent,
             vk::CommandBuffer   command_buffer);
 
         static void CopyImageToImage(
@@ -522,6 +572,14 @@ namespace Ignis {
 #pragma region Image
         static void DestroyImage(const Image &image);
         static void DestroyImageView(vk::ImageView view);
+
+        static Image AllocateImageCubeWithMipLevels(
+            vma::AllocationCreateFlags allocation_flags,
+            vma::MemoryUsage           memory_usage,
+            vk::ImageCreateFlagBits    image_flags,
+            vk::Format                 format,
+            vk::ImageUsageFlags        usage_flags,
+            const vk::Extent2D        &extent);
 
         static Image AllocateImageCube(
             vma::AllocationCreateFlags allocation_flags,

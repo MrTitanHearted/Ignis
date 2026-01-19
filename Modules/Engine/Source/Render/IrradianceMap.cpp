@@ -1,7 +1,7 @@
 #include <Ignis/Render.hpp>
 
 namespace Ignis {
-    void Render::generateIrradianceMap() {
+    void Render::generateIrradianceMap(const Settings &settings) {
         const FileAsset shader_file = FileAsset::LoadBinaryFromPath("Assets/Shaders/Ignis/GenerateIrradianceMap.spv").value();
 
         std::vector<uint32_t> shader_code{};
@@ -11,13 +11,15 @@ namespace Ignis {
 
         const vk::ShaderModule shader_module = Vulkan::CreateShaderModuleFromSPV(shader_code);
 
+        const uint32_t &gImageSize = settings.IrradianceResulution;
+
         m_IrradianceImage = Vulkan::AllocateImageCube(
             {}, vma::MemoryUsage::eGpuOnly,
             vk::ImageCreateFlagBits::eCubeCompatible,
             vk::Format::eR16G16B16A16Sfloat,
             vk::ImageUsageFlagBits::eColorAttachment |
                 vk::ImageUsageFlagBits::eSampled,
-            {32, 32});
+            {gImageSize, gImageSize});
         m_IrradianceImageView = Vulkan::CreateImageColorViewCube(m_IrradianceImage.Handle, m_IrradianceImage.Format);
 
         const vk::DescriptorPool descriptor_pool =
@@ -59,6 +61,8 @@ namespace Ignis {
             .update(descriptor_set);
 
         Vulkan::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
+            Vulkan::BeginDebugUtilsLabel(command_buffer, "Ignis::Render::GenerateIrradianceMap", {1.0f, 1.0f, 0.0f, 1.0f});
+
             Vulkan::BarrierMerger merger{};
 
             merger.putImageBarrier(
@@ -72,7 +76,7 @@ namespace Ignis {
             merger.flushBarriers(command_buffer);
 
             Vulkan::BeginRenderPass(
-                {32, 32},
+                {gImageSize, gImageSize},
                 {Vulkan::GetRenderingAttachmentInfo(
                     render_image_view,
                     vk::ImageLayout::eColorAttachmentOptimal,
@@ -85,15 +89,15 @@ namespace Ignis {
             vk::Viewport viewport{};
             viewport
                 .setX(0.0f)
-                .setY(32.0f)
-                .setWidth(32.0f)
-                .setHeight(-32.0f)
+                .setY(static_cast<glm::f32>(gImageSize))
+                .setWidth(static_cast<glm::f32>(gImageSize))
+                .setHeight(-static_cast<glm::f32>(gImageSize))
                 .setMinDepth(0.0f)
                 .setMaxDepth(1.0f);
             vk::Rect2D scissor{};
             scissor
                 .setOffset(vk::Offset2D{0, 0})
-                .setExtent({32, 32});
+                .setExtent({gImageSize, gImageSize});
             command_buffer.setViewport(0, {viewport});
             command_buffer.setScissor(0, {scissor});
 
@@ -112,6 +116,8 @@ namespace Ignis {
                 vk::PipelineStageFlagBits2::eFragmentShader,
                 vk::AccessFlagBits2::eShaderRead);
             merger.flushBarriers(command_buffer);
+
+            Vulkan::EndDebugUtilsLabel(command_buffer);
         });
 
         Vulkan::DestroyPipeline(pipeline);

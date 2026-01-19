@@ -59,6 +59,8 @@ namespace Ignis {
         void createViewportImage(ImGuiSystem *im_gui, uint32_t width, uint32_t height, FrameGraph &frame_graph);
         void destroyViewportImage(ImGuiSystem *im_gui, FrameGraph &frame_graph);
 
+        void updateSpotLight();
+
         bool onKeyEvent(const WindowKeyEvent &event);
         bool onMouseMove(const WindowMouseMoveEvent &event);
         bool onMouseScroll(const WindowMouseScrollEvent &event);
@@ -85,5 +87,12 @@ namespace Ignis {
 
         ModelPanelState m_ModelPanel;
         LightPanelState m_LightPanel;
+
+        glm::vec3 m_SpotLightColor{0.0f};
+        glm::f32  m_SpotLightPower{0.0f};
+        glm::f32  m_SpotLightCutOff{0.0f};
+        glm::f32  m_SpotLightOuterCutOff{0.0f};
+
+        Render::SpotLightID m_SpotLightID{Render::k_InvalidSpotLightID};
     };
 }  // namespace Ignis

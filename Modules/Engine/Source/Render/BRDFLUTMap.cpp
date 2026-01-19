@@ -1,9 +1,8 @@
 #include <Ignis/Render.hpp>
 
 namespace Ignis {
-    constexpr static uint32_t gImageSize = 512;
 
-    void Render::generateBRDFLUTMap() {
+    void Render::generateBRDFLUTMap(const Settings &settings) {
         const FileAsset shader_file = FileAsset::LoadBinaryFromPath("Assets/Shaders/Ignis/GenerateBRDFLUTMap.spv").value();
 
         std::vector<uint32_t> shader_code{};
@@ -12,6 +11,8 @@ namespace Ignis {
         std::memcpy(shader_code.data(), shader_file.getContent().data(), shader_file.getSize());
 
         const vk::ShaderModule shader_module = Vulkan::CreateShaderModuleFromSPV(shader_code);
+
+        const uint32_t &gImageSize = settings.BRDFLUTResolution;
 
         m_BRDFLUTImage = Vulkan::AllocateImage2D(
             {}, vma::MemoryUsage::eGpuOnly, {},
@@ -39,6 +40,8 @@ namespace Ignis {
                 .build(pipeline_layout);
 
         Vulkan::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
+            Vulkan::BeginDebugUtilsLabel(command_buffer, "Ignis::Render::GenerateBRDFLUTMap", {1.0f, 1.0f, 0.0f, 1.0f});
+
             Vulkan::BarrierMerger merger{};
 
             merger.putImageBarrier(
@@ -90,6 +93,8 @@ namespace Ignis {
                 vk::PipelineStageFlagBits2::eFragmentShader,
                 vk::AccessFlagBits2::eShaderRead);
             merger.flushBarriers(command_buffer);
+
+            Vulkan::EndDebugUtilsLabel(command_buffer);
         });
 
         Vulkan::DestroyPipeline(pipeline);

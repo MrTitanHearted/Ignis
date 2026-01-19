@@ -31,6 +31,30 @@ const static float k_PI = 3.14159265358979323846f;
 
 const static uint k_InvalidTexture = ~0u;
 
+struct PBRState {
+    float3 N;
+    float3 V;
+
+    float NoL;
+    float NoV;
+    float NoH;
+    float LoH;
+    float VoH;
+
+    float  PerceptualRoughness;
+    float  AlphaRoughness;
+    float3 Reflectance0;
+    float3 Reflectance90;
+
+    float3 BaseDiffuseColor;
+    float3 BaseSpecularColor;
+
+    float3 FssEss;
+
+    float BRDFScale;
+    float BRDFBias;
+};
+
 struct Material {
     float3 AlbedoFactor;
     float  MetallicFactor;
@@ -124,6 +148,8 @@ struct DrawPC {
 
     float3 ViewPosition;
 
+    float MaxPrefilterMipLevel;
+
     uint Model;
 };
 
@@ -180,14 +206,12 @@ float4 fs_main(FragmentInput input) : SV_Target {
     float material_metallic  = material.MetallicFactor;
     float material_roughness = material.RoughnessFactor;
 
-    if (k_InvalidTexture != material.AlbedoTexture) {
+    {
         float3 texture_albedo = gTextures[material.AlbedoTexture].Sample(input.UV).rgb;
-
-        texture_albedo = pow(texture_albedo, 2.2f);
 
         material_albedo *= texture_albedo;
     }
-    if (k_InvalidTexture != material.NormalTexture) {
+    {
         float3 tangent_normal = gTextures[material.NormalTexture].Sample(input.UV).rgb;
 
         tangent_normal = normalize(tangent_normal * 2.0f - 1.0f);
@@ -205,60 +229,83 @@ float4 fs_main(FragmentInput input) : SV_Target {
 
         material_normal = mul(TBN, tangent_normal);
     }
-    if (k_InvalidTexture != material.EmissiveTexture) {
+    {
         material_emission *= gTextures[material.EmissiveTexture].Sample(input.UV).rgb;
     }
-    if (k_InvalidTexture != material.AmbientOcclusionTexture) {
+    {
         material_ao *= gTextures[material.AmbientOcclusionTexture].Sample(input.UV).rgb;
     }
-    if (k_InvalidTexture != material.MetallicRoughnessTexture) {
+    {
         float2 material_metallic_roughness = gTextures[material.MetallicRoughnessTexture].Sample(input.UV).gb;
 
         material_metallic *= material_metallic_roughness.g;
         material_roughness *= material_metallic_roughness.r;
-    } else {
-        if (k_InvalidTexture != material.MetallicTexture) {
-            material_metallic *= gTextures[material.MetallicTexture].Sample(input.UV).r;
-        }
-        if (k_InvalidTexture != material.RoughnessTexture) {
-            material_roughness *= gTextures[material.RoughnessTexture].Sample(input.UV).r;
-        }
+    }
+    {
+        material_metallic *= gTextures[material.MetallicTexture].Sample(input.UV).r;
+        material_roughness *= gTextures[material.RoughnessTexture].Sample(input.UV).r;
     }
 
     // PBR lighting calculation
     float3 N = normalize(material_normal);
     float3 V = normalize(gDrawPC.ViewPosition - input.FragmentPosition);
 
-    float n_dot_v = max(dot(N, V), 0.0f);
+    float n_dot_v = saturate(dot(N, V));
+
+    float2 brdf = gBRDFLUTTexture.Sample(float2(n_dot_v, material_roughness)).rg;
+
+    float3 f0                  = GetF0Metallic(material_albedo, material_metallic);
+    float3 base_diffuse_color  = lerp(material_albedo, float3(0.0f), material_metallic);
+    float3 base_specular_color = lerp(f0, material_albedo, material_metallic);
+
+    float reflectance   = max(max(base_specular_color.r, base_specular_color.g), base_specular_color.b);
+    float reflectance90 = saturate(reflectance * 25.0f);
+
+    PBRState pbr_state;
+    pbr_state.N   = N;
+    pbr_state.V   = V;
+    pbr_state.NoV = n_dot_v;
+
+    pbr_state.PerceptualRoughness = material_roughness;
+    pbr_state.AlphaRoughness      = material_roughness * material_roughness;
+    pbr_state.Reflectance0        = base_specular_color;
+    pbr_state.Reflectance90       = reflectance90;
+    pbr_state.BaseDiffuseColor    = base_diffuse_color;
+    pbr_state.BaseSpecularColor   = base_specular_color;
+
+    pbr_state.BRDFScale = brdf.x;
+    pbr_state.BRDFBias  = brdf.y;
+
+    float3 fr  = max(float3(1.0f - pbr_state.PerceptualRoughness), pbr_state.Reflectance0) - pbr_state.Reflectance0;
+    float3 k_s = pbr_state.Reflectance0 + fr * pow(1.0f - pbr_state.NoV, 5.0f);
+
+    pbr_state.FssEss = k_s * pbr_state.BRDFScale + pbr_state.BRDFBias;
 
     float3 result = float3(0.0f);
 
-    float3 f0 = GetF0Metallic(material_albedo, material_metallic);
-
     // Directional light
-    if (length(gDirectionLight.Color) > 0.0f &&
-        length(gDirectionLight.Direction) > 0.0f &&
-        gDirectionLight.Power > 0.0f) {
+    {
         float3 L = normalize(-gDirectionLight.Direction);
         float3 H = normalize(V + L);
 
-        float n_dot_l = max(dot(N, L), 0.0f);
-        float n_dot_h = max(dot(N, H), 0.0f);
-        float v_dot_h = max(dot(V, H), 0.0f);
-
-        float  D = CalculateDistributionGGX(n_dot_h, material_roughness);
-        float3 F = CalculateFresnelDotpoint7(v_dot_h, f0);
-        float  G = CalculateGeometrySmith(n_dot_v, n_dot_l, material_roughness);
-
-        float3 kS = F;
-        float3 kD = (1.0f - kS) * (1.0f - material_metallic);
-
-        float3 diffuse_brdf  = EvaluateDiffuseBRDF(kD, material_albedo);
-        float3 specular_brdf = EvaluateSpecularBRDF(D, F, G, n_dot_l, n_dot_v);
-
         float3 radiance = gDirectionLight.Color * gDirectionLight.Power;
 
-        result += EvaluateBRDF(diffuse_brdf, specular_brdf, radiance, n_dot_l);
+        pbr_state.NoL = saturate(dot(N, L));
+        pbr_state.NoH = saturate(dot(N, H));
+        pbr_state.VoH = saturate(dot(V, H));
+        pbr_state.LoH = saturate(dot(L, H));
+
+        float  D = CalculateDistributionTrowbrigeReitz(&pbr_state);
+        float3 F = CalculateFresnelSchlick(&pbr_state);
+        float  G = CalculateGeometricOcclusion(&pbr_state);
+
+        float3 kS = F;
+        float3 kD = (1.0f - kS);
+
+        float3 diffuse_brdf  = EvaluateDiffuseBRDFDisneyBurley(kD, &pbr_state);
+        float3 specular_brdf = EvaluateSpecularBRDF(D, F, G, pbr_state.NoL, pbr_state.NoV);
+
+        result += EvaluateBRDF(diffuse_brdf, specular_brdf, radiance, pbr_state.NoL);
     }
 
     for (uint i = 0; i < gLightData.PointLightCount; i++) {
@@ -267,26 +314,27 @@ float4 fs_main(FragmentInput input) : SV_Target {
         float3 L = normalize(LightToFragment);
         float3 H = normalize(V + L);
 
-        float n_dot_l = max(dot(N, L), 0.0f);
-        float n_dot_h = max(dot(N, H), 0.0f);
-        float v_dot_h = max(dot(V, H), 0.0f);
-
-        float  D = CalculateDistributionGGX(n_dot_h, material_roughness);
-        float3 F = CalculateFresnelDotpoint7(v_dot_h, f0);
-        float  G = CalculateGeometrySmith(n_dot_v, n_dot_l, material_roughness);
-
-        float3 kS = F;
-        float3 kD = (1.0f - kS) * (1.0f - material_metallic);
-
-        float3 diffuse_brdf  = EvaluateDiffuseBRDF(kD, material_albedo);
-        float3 specular_brdf = EvaluateSpecularBRDF(D, F, G, n_dot_l, n_dot_v);
-
         float distance    = length(LightToFragment);
         float attenuation = 1.0f / (distance * distance);
 
         float3 radiance = gPointLights[i].Color * gPointLights[i].Power * attenuation;
 
-        result += EvaluateBRDF(diffuse_brdf, specular_brdf, radiance, n_dot_l);
+        pbr_state.NoL = saturate(dot(N, L));
+        pbr_state.NoH = saturate(dot(N, H));
+        pbr_state.VoH = saturate(dot(V, H));
+        pbr_state.LoH = saturate(dot(L, H));
+
+        float  D = CalculateDistributionTrowbrigeReitz(&pbr_state);
+        float3 F = CalculateFresnelSchlick(&pbr_state);
+        float  G = CalculateGeometricOcclusion(&pbr_state);
+
+        float3 kS = F;
+        float3 kD = (1.0f - kS);
+
+        float3 diffuse_brdf  = EvaluateDiffuseBRDFDisneyBurley(kD, &pbr_state);
+        float3 specular_brdf = EvaluateSpecularBRDF(D, F, G, pbr_state.NoL, pbr_state.NoV);
+
+        result += EvaluateBRDF(diffuse_brdf, specular_brdf, radiance, pbr_state.NoL);
     }
 
     for (uint i = 0; i < gLightData.SpotLightCount; i++) {
@@ -295,53 +343,51 @@ float4 fs_main(FragmentInput input) : SV_Target {
         float3 L = normalize(LightToFragment);
         float3 H = normalize(V + L);
 
-        float n_dot_l = max(dot(N, L), 0.0f);
-        float n_dot_h = max(dot(N, H), 0.0f);
-        float v_dot_h = max(dot(V, H), 0.0f);
-
-        float  D = CalculateDistributionGGX(n_dot_h, material_roughness);
-        float3 F = CalculateFresnelDotpoint7(v_dot_h, f0);
-        float  G = CalculateGeometrySmith(n_dot_v, n_dot_l, material_roughness);
-
-        float3 kS = F;
-        float3 kD = (1.0f - kS) * (1.0f - material_metallic);
-
-        float3 diffuse_brdf  = EvaluateDiffuseBRDF(kD, material_albedo);
-        float3 specular_brdf = EvaluateSpecularBRDF(D, F, G, n_dot_l, n_dot_v);
-
         float theta     = dot(L, normalize(-gSpotLights[i].Direction));
         float epsilon   = gSpotLights[i].CutOff - gSpotLights[i].OuterCutOff;
-        float intensity = clamp((theta - gSpotLights[i].OuterCutOff) / epsilon, 0.0f, 1.0f);
+        float intensity = saturate((theta - gSpotLights[i].OuterCutOff) / epsilon);
 
         float distance    = length(LightToFragment);
         float attenuation = 1.0f / (distance * distance);
 
-        float3 radiance = gSpotLights[i].Color * gSpotLights[i].Power * intensity * attenuation;
+        float3 radiance = gSpotLights[i].Color * gSpotLights[i].Power * attenuation * intensity;
 
-        result += EvaluateBRDF(diffuse_brdf, specular_brdf, radiance, n_dot_l);
-    }
+        pbr_state.NoL = saturate(dot(N, L));
+        pbr_state.NoH = saturate(dot(N, H));
+        pbr_state.VoH = saturate(dot(V, H));
+        pbr_state.LoH = saturate(dot(L, H));
 
-    // Add ambient occlusion
-    {
-        float3 R = reflect(-V, N);
-        float3 F = CalculateFresnelSchlickRoughness(n_dot_v, f0, material_roughness);
+        float  D = CalculateDistributionTrowbrigeReitz(&pbr_state);
+        float3 F = CalculateFresnelSchlick(&pbr_state);
+        float  G = CalculateGeometricOcclusion(&pbr_state);
 
         float3 kS = F;
-        float3 kD = (1.0f - kS) * (1.0f - material_metallic);
+        float3 kD = (1.0f - kS);
 
-        const float MAX_REFLECTION_LOD = 8.0f;
+        float3 diffuse_brdf  = EvaluateDiffuseBRDFDisneyBurley(kD, &pbr_state);
+        float3 specular_brdf = EvaluateSpecularBRDF(D, F, G, pbr_state.NoL, pbr_state.NoV);
 
-        float3 irradiance = gIrradianceTexture.Sample(N).rgb;
-        float3 diffuse    = irradiance * material_albedo;
+        result += EvaluateBRDF(diffuse_brdf, specular_brdf, radiance, pbr_state.NoL);
+    }
 
-        float2 brdf = gBRDFLUTTexture.Sample(float2(n_dot_v, material_roughness)).rg;
+    // IBL
+    {
+        float3 R = normalize(reflect(-pbr_state.V, pbr_state.N));
 
-        float3 prefilter_color = gPrefilterTexture.SampleLevel(R, material_roughness * MAX_REFLECTION_LOD).rgb;
-        float3 specular        = prefilter_color * (F * brdf.x + brdf.y);
+        float3 radiance =
+            gPrefilterTexture.SampleLevel(R, pbr_state.PerceptualRoughness * gDrawPC.MaxPrefilterMipLevel).rgb;
+        float3 specular_ibl = radiance * pbr_state.FssEss;
 
-        float3 ambient = (kD * diffuse + specular) * material_ao;
+        float3 irradiance  = gIrradianceTexture.Sample(pbr_state.N).rgb;
+        float  ems         = 1.0f - (pbr_state.BRDFScale + pbr_state.BRDFBias);
+        float3 f_average   = pbr_state.Reflectance0 + (1.0f - pbr_state.Reflectance0) / 21.0f;
+        float3 fms_ems     = f_average * ems * pbr_state.FssEss / (1.0f - f_average * ems);
+        float3 k_d         = pbr_state.BaseDiffuseColor * (1.0f - pbr_state.FssEss + fms_ems);
+        float3 diffuse_ibl = (fms_ems + k_d) * irradiance;
 
-        result += ambient;
+        float3 ibl = diffuse_ibl + specular_ibl;
+
+        result += ibl;
     }
 
     result += material_emission;
@@ -360,6 +406,16 @@ float3 EvaluateBRDF(
     return (diffuse_brdf + specular_brdf) * radiance * n_dot_l;
 }
 
+float3 EvaluateDiffuseBRDFDisneyBurley(
+    float3    k_D,
+    PBRState *state) {
+    float f90 = 2.0f * state->LoH * state->LoH * state->AlphaRoughness - 0.5f;
+
+    return k_D * (state->BaseDiffuseColor / k_PI) *
+           (1.0f + f90 * pow(1.0f - state->NoL, 5.0f)) *
+           (1.0f + f90 * pow(1.0f - state->NoV, 5.0f));
+}
+
 float3 EvaluateDiffuseBRDF(
     float3 kD,
     float3 material_albedo) {
@@ -372,17 +428,39 @@ float3 EvaluateSpecularBRDF(
     float  G,
     float  n_dot_l,
     float  n_dot_v) {
-    return D * G * F / max(4 * n_dot_v * n_dot_l, 0.001f);
+    return D * G * F / (4 * n_dot_v * n_dot_l + 0.001f);
+}
+
+float CalculateDistributionTrowbrigeReitz(PBRState *state) {
+    float roughness_sq = state->AlphaRoughness * state->AlphaRoughness;
+
+    float f = (state->NoH * roughness_sq - state->NoH) * state->NoH + 1.0f;
+
+    return roughness_sq / (k_PI * f * f);
 }
 
 float CalculateDistributionGGX(float n_dot_h, float roughness) {
-    float a = roughness * roughness * roughness * roughness;
+    float a  = roughness * roughness;
+    float a2 = a * a;
 
-    float denominator = (n_dot_h * n_dot_h * (a - 1.0f) + 1.0f);
+    float nominator   = a2;
+    float denominator = (n_dot_h * n_dot_h * (a2 - 1.0f) + 1.0f);
 
     denominator = k_PI * denominator * denominator;
 
-    return a / denominator;
+    return nominator / denominator;
+}
+
+float CalculateGeometricOcclusion(PBRState *state) {
+    float n_dot_l = state->NoL;
+    float n_dot_v = state->NoV;
+
+    float r_2 = state->AlphaRoughness * state->AlphaRoughness;
+
+    float attenuation_l = 2.0f * n_dot_l / (n_dot_l + sqrt(r_2 + (1.0f - r_2) * n_dot_l * n_dot_v));
+    float attenuation_v = 2.0f * n_dot_v / (n_dot_v + sqrt(r_2 + (1.0f - r_2) * n_dot_v * n_dot_l));
+
+    return attenuation_l * attenuation_v;
 }
 
 float CalculateGeometrySmith(float n_dot_v, float n_dot_l, float roughness) {
@@ -396,9 +474,16 @@ float CalculateGeometrySchlickGGX(float dot_product, float roughness) {
     float r = roughness + 1.0f;
     float k = r * r / 8.0f;
 
+    float nominator   = dot_product;
     float denominator = dot_product * (1.0f - k) + k;
 
-    return dot_product / denominator;
+    return nominator / denominator;
+}
+
+float3 CalculateFresnelSchlick(PBRState *state) {
+    return state->Reflectance0 +
+           (state->Reflectance90 - state->Reflectance0) *
+               pow(saturate(1.0f - state->VoH), 5.0f);
 }
 
 float3 CalculateFresnelSchlick(float a_dot_b, float3 f0) {
@@ -419,6 +504,10 @@ float3 GetF0Metallic(float3 albedo, float metallic) {
 
 float3 ApplyGammaCorrection(float3 color, float gamma) {
     return pow(color, float3(1.0f / gamma));
+}
+
+float3 ApplyToneMappingHDR(float3 color) {
+    return color / (color + 1.0f);
 }
 
 float3 ApplyToneMappingACES(float3 color) {

@@ -74,7 +74,7 @@ namespace Ignis {
 
             index = light_data->PointLightCount++;
 
-            Vulkan::FlushAllocation(s_pInstance->m_LightDataBuffer.Allocation, offsetof(LightData, PointLightCount), sizeof(uint32_t));
+            Vulkan::FlushAllocation(s_pInstance->m_LightDataBuffer.Allocation, offsetof(LightData, PointLightCount), sizeof(PointLightID));
         }
 
         if (sizeof(PointLight) * index >= s_pInstance->m_PointLightBuffer.Size) {
@@ -108,7 +108,7 @@ namespace Ignis {
             Vulkan::DestroyBuffer(old_buffer);
 
             Vulkan::DescriptorSetWriter()
-                .writeStorageBuffer(2, s_pInstance->m_PointLightBuffer.Handle, 0, s_pInstance->m_PointLightBuffer.Size)
+                .writeStorageBuffer(1, s_pInstance->m_PointLightBuffer.Handle, 0, s_pInstance->m_PointLightBuffer.Size)
                 .update(s_pInstance->m_LightDescriptorSet);
         }
 

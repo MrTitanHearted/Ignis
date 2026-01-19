@@ -10,6 +10,66 @@ namespace Ignis {
         const vk::Image               image,
         const vk::ImageLayout         old_layout,
         const vk::ImageLayout         new_layout,
+        const uint32_t                base_mip_level,
+        const uint32_t                mip_level_count,
+        const uint32_t                base_array_layer,
+        const uint32_t                array_layer_count,
+        const vk::PipelineStageFlags2 src_stage,
+        const vk::AccessFlags2        src_access,
+        const vk::PipelineStageFlags2 dst_stage,
+        const vk::AccessFlags2        dst_access) {
+        vk::ImageMemoryBarrier2 image_barrier{};
+        image_barrier
+            .setSrcStageMask(src_stage)
+            .setSrcAccessMask(src_access)
+            .setDstStageMask(dst_stage)
+            .setDstAccessMask(dst_access)
+            .setOldLayout(old_layout)
+            .setNewLayout(new_layout)
+            .setImage(image)
+            .setSubresourceRange(
+                vk::ImageSubresourceRange{}
+                    .setAspectMask(GetImageAspectMask(new_layout))
+                    .setBaseMipLevel(base_mip_level)
+                    .setLevelCount(mip_level_count)
+                    .setBaseArrayLayer(base_array_layer)
+                    .setLayerCount(array_layer_count));
+        m_ImageBarriers.push_back(image_barrier);
+    }
+
+    void Vulkan::BarrierMerger::putImageBarrier(
+        const vk::Image               image,
+        const vk::ImageLayout         old_layout,
+        const vk::ImageLayout         new_layout,
+        const uint32_t                base_mip_level,
+        const uint32_t                base_array_layer,
+        const vk::PipelineStageFlags2 src_stage,
+        const vk::AccessFlags2        src_access,
+        const vk::PipelineStageFlags2 dst_stage,
+        const vk::AccessFlags2        dst_access) {
+        vk::ImageMemoryBarrier2 image_barrier{};
+        image_barrier
+            .setSrcStageMask(src_stage)
+            .setSrcAccessMask(src_access)
+            .setDstStageMask(dst_stage)
+            .setDstAccessMask(dst_access)
+            .setOldLayout(old_layout)
+            .setNewLayout(new_layout)
+            .setImage(image)
+            .setSubresourceRange(
+                vk::ImageSubresourceRange{}
+                    .setAspectMask(GetImageAspectMask(new_layout))
+                    .setBaseMipLevel(base_mip_level)
+                    .setLevelCount(vk::RemainingMipLevels)
+                    .setBaseArrayLayer(base_array_layer)
+                    .setLayerCount(vk::RemainingArrayLayers));
+        m_ImageBarriers.push_back(image_barrier);
+    }
+
+    void Vulkan::BarrierMerger::putImageBarrier(
+        const vk::Image               image,
+        const vk::ImageLayout         old_layout,
+        const vk::ImageLayout         new_layout,
         const vk::PipelineStageFlags2 src_stage,
         const vk::AccessFlags2        src_access,
         const vk::PipelineStageFlags2 dst_stage,
@@ -131,6 +191,66 @@ namespace Ignis {
     }
 
     void Vulkan::BlitImageToImage(
+        const vk::Image src_image,
+        const vk::Image dst_image,
+
+        const uint32_t src_base_mip_level,
+        const uint32_t dst_base_mip_level,
+        const uint32_t src_base_array_layer,
+        const uint32_t dst_base_array_layer,
+        const uint32_t src_array_layer_count,
+        const uint32_t dst_array_layer_count,
+
+        const vk::Offset3D &src_offset,
+        const vk::Offset3D &dst_offset,
+        const vk::Extent3D &src_extent,
+        const vk::Extent3D &dst_extent,
+
+        const vk::CommandBuffer command_buffer) {
+        vk::ImageBlit2 blit_region{};
+        blit_region
+            .setSrcOffsets({
+                src_offset,
+                vk::Offset3D{
+                    static_cast<int32_t>(src_extent.width),
+                    static_cast<int32_t>(src_extent.height),
+                    static_cast<int32_t>(src_extent.depth),
+                },
+            })
+            .setDstOffsets({
+                dst_offset,
+                vk::Offset3D{
+                    static_cast<int32_t>(dst_extent.width),
+                    static_cast<int32_t>(dst_extent.height),
+                    static_cast<int32_t>(dst_extent.depth),
+                },
+            })
+            .setSrcSubresource(
+                vk::ImageSubresourceLayers{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                    .setBaseArrayLayer(src_base_array_layer)
+                    .setLayerCount(src_array_layer_count)
+                    .setMipLevel(src_base_mip_level))
+            .setDstSubresource(
+                vk::ImageSubresourceLayers{}
+                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                    .setBaseArrayLayer(dst_base_array_layer)
+                    .setLayerCount(dst_array_layer_count)
+                    .setMipLevel(dst_base_mip_level));
+
+        vk::BlitImageInfo2 blit_info{};
+        blit_info
+            .setSrcImage(src_image)
+            .setSrcImageLayout(vk::ImageLayout::eTransferSrcOptimal)
+            .setDstImage(dst_image)
+            .setDstImageLayout(vk::ImageLayout::eTransferDstOptimal)
+            .setFilter(vk::Filter::eNearest)
+            .setRegions({blit_region});
+
+        command_buffer.blitImage2(blit_info);
+    }
+
+    void Vulkan::BlitImageToImage(
         const vk::Image         src_image,
         const vk::Image         dst_image,
         const vk::Offset3D     &src_offset,
@@ -179,6 +299,88 @@ namespace Ignis {
             .setRegions({blit_region});
 
         command_buffer.blitImage2(blit_info);
+    }
+
+    void Vulkan::GenerateImageCubeMipLevels(
+        const vk::Image         image,
+        const vk::ImageLayout   old_layout,
+        const vk::ImageLayout   new_layout,
+        const uint32_t          mip_level_count,
+        const vk::Extent2D     &extent,
+        const vk::CommandBuffer command_buffer) {
+        BarrierMerger merger{};
+        if (vk::ImageLayout::eTransferDstOptimal != old_layout) {
+            merger.putImageBarrier(
+                image,
+                old_layout,
+                vk::ImageLayout::eTransferDstOptimal,
+                0, vk::RemainingMipLevels,
+                0, 6,
+                vk::PipelineStageFlagBits2::eAllCommands,
+                vk::AccessFlagBits2::eTransferRead,
+                vk::PipelineStageFlagBits2::eBlit,
+                vk::AccessFlagBits2::eTransferWrite);
+            merger.flushBarriers(command_buffer);
+        }
+
+        merger.putImageBarrier(
+            image,
+            vk::ImageLayout::eTransferDstOptimal,
+            vk::ImageLayout::eTransferSrcOptimal,
+            0, 1,
+            0, 6,
+            vk::PipelineStageFlagBits2::eBlit,
+            vk::AccessFlagBits2::eTransferRead,
+            vk::PipelineStageFlagBits2::eBlit,
+            vk::AccessFlagBits2::eTransferWrite);
+        merger.flushBarriers(command_buffer);
+
+        vk::Extent3D src_extent{extent, 1};
+        vk::Extent3D dst_extent{extent, 1};
+
+        for (uint32_t mip_level = 1; mip_level < mip_level_count; mip_level++) {
+            dst_extent.width  = static_cast<uint32_t>(static_cast<glm::f32>(dst_extent.width) * 0.5f);
+            dst_extent.height = static_cast<uint32_t>(static_cast<glm::f32>(dst_extent.height) * 0.5f);
+            BlitImageToImage(
+                image,
+                image,
+                mip_level - 1,
+                mip_level,
+                0, 0,
+                6, 6,
+                {0, 0, 0},
+                {0, 0, 0},
+                src_extent,
+                dst_extent,
+                command_buffer);
+
+            merger.putImageBarrier(
+                image,
+                vk::ImageLayout::eTransferDstOptimal,
+                vk::ImageLayout::eTransferSrcOptimal,
+                mip_level, 1,
+                0, 6,
+                vk::PipelineStageFlagBits2::eBlit,
+                vk::AccessFlagBits2::eTransferWrite,
+                vk::PipelineStageFlagBits2::eAllCommands,
+                vk::AccessFlagBits2::eMemoryRead);
+            merger.flushBarriers(command_buffer);
+
+            src_extent.width  = dst_extent.width;
+            src_extent.height = dst_extent.height;
+        }
+
+        merger.putImageBarrier(
+            image,
+            vk::ImageLayout::eTransferSrcOptimal,
+            new_layout,
+            0, vk::RemainingMipLevels,
+            0, 6,
+            vk::PipelineStageFlagBits2::eBlit,
+            vk::AccessFlagBits2::eTransferRead,
+            vk::PipelineStageFlagBits2::eBlit,
+            vk::AccessFlagBits2::eTransferWrite);
+        merger.flushBarriers(command_buffer);
     }
 
     void Vulkan::CopyImageToImage(

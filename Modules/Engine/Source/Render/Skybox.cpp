@@ -3,7 +3,7 @@
 namespace Ignis {
     vk::ShaderModule g_SkyboxShader = nullptr;
 
-    void Render::initializeSkybox(const std::array<std::filesystem::path, 6> &skybox_face_paths) {
+    void Render::initializeSkybox(const Settings &settings) {
         m_SkyboxDescriptorLayout =
             Vulkan::DescriptorSetLayoutBuilder()
                 .addCombinedImageSampler(0, vk::ShaderStageFlagBits::eFragment)
@@ -15,157 +15,12 @@ namespace Ignis {
                 0, sizeof(CameraPC)},
             {m_SkyboxDescriptorLayout});
 
+        generateSkyboxMap(settings);
+        generateBRDFLUTMap(settings);
+        generatePrefilterMap(settings);
+        generateIrradianceMap(settings);
+
         m_SkyboxDescriptorSet = Vulkan::AllocateDescriptorSet(m_SkyboxDescriptorLayout, m_DescriptorPool);
-
-        constexpr auto texture_asset_type = TextureAsset::Type::eRGBA32f;
-        constexpr auto image_format       = vk::Format::eR32G32B32A32Sfloat;
-
-        size_t face_size = 0;
-
-        {
-            const TextureAsset texture_asset = TextureAsset::LoadFromPath(skybox_face_paths[0], texture_asset_type).value();
-
-            face_size = texture_asset.getData().size();
-
-            m_SkyboxImage = Vulkan::AllocateImageCube(
-                {}, vma::MemoryUsage::eGpuOnly, {},
-                image_format,
-                vk::ImageUsageFlagBits::eSampled |
-                    vk::ImageUsageFlagBits::eTransferDst,
-                vk::Extent2D{texture_asset.getWidth(), texture_asset.getHeight()});
-
-            m_SkyboxImageView = Vulkan::CreateImageColorViewCube(m_SkyboxImage.Handle, m_SkyboxImage.Format);
-        }
-
-        m_SkyboxVertexBuffer = Vulkan::AllocateBuffer(
-            {}, vma::MemoryUsage::eGpuOnly, {},
-            sizeof(glm::vec3) * 8,
-            vk::BufferUsageFlagBits::eVertexBuffer |
-                vk::BufferUsageFlagBits::eTransferDst);
-        m_SkyboxIndexBuffer = Vulkan::AllocateBuffer(
-            {}, vma::MemoryUsage::eGpuOnly, {},
-            sizeof(uint16_t) * 36,
-            vk::BufferUsageFlagBits::eIndexBuffer |
-                vk::BufferUsageFlagBits::eTransferDst);
-
-        {
-            const Vulkan::Buffer staging = Vulkan::AllocateBuffer(
-                vma::AllocationCreateFlagBits::eMapped,
-                vma::MemoryUsage::eCpuOnly, {},
-                face_size * 6 +
-                    m_SkyboxVertexBuffer.Size +
-                    m_SkyboxIndexBuffer.Size,
-                vk::BufferUsageFlagBits::eTransferSrc);
-
-            constexpr glm::vec3 vertices[]{
-                glm::vec3{-1.0f, -1.0f, -1.0f},  // 0
-                glm::vec3{1.0f, -1.0f, -1.0f},   // 1
-                glm::vec3{1.0f, 1.0f, -1.0f},    // 2
-                glm::vec3{-1.0f, 1.0f, -1.0f},   // 3
-                glm::vec3{-1.0f, -1.0f, 1.0f},   // 4
-                glm::vec3{1.0f, -1.0f, 1.0f},    // 5
-                glm::vec3{1.0f, 1.0f, 1.0f},     // 6
-                glm::vec3{-1.0f, 1.0f, 1.0f},    // 7
-            };
-
-            constexpr uint16_t indices[36] = {
-                // +X face
-                1, 5, 6,
-                6, 2, 1,
-
-                // -X face
-                4, 0, 3,
-                3, 7, 4,
-
-                // +Y face
-                3, 2, 6,
-                6, 7, 3,
-
-                // -Y face
-                4, 5, 1,
-                1, 0, 4,
-
-                // +Z face
-                5, 4, 7,
-                7, 6, 5,
-
-                // -Z face
-                0, 1, 2,
-                2, 3, 0};
-
-            {
-                uint64_t offset = 0;
-                for (const std::filesystem::path &path : skybox_face_paths) {
-                    TextureAsset texture_asset = TextureAsset::LoadFromPath(path, texture_asset_type).value();
-
-                    Vulkan::CopyMemoryToAllocation(
-                        texture_asset.getData().data(),
-                        staging.Allocation,
-                        offset,
-                        texture_asset.getData().size());
-                    offset += texture_asset.getData().size();
-                }
-
-                Vulkan::CopyMemoryToAllocation(vertices, staging.Allocation, offset, m_SkyboxVertexBuffer.Size);
-                offset += m_SkyboxVertexBuffer.Size;
-                Vulkan::CopyMemoryToAllocation(indices, staging.Allocation, offset, m_SkyboxIndexBuffer.Size);
-                offset += m_SkyboxIndexBuffer.Size;
-            }
-
-            Vulkan::ImmediateSubmit([&](const vk::CommandBuffer command_buffer) {
-                Vulkan::BarrierMerger merger{};
-
-                merger.putImageBarrier(
-                    m_SkyboxImage.Handle,
-                    vk::ImageLayout::eUndefined,
-                    vk::ImageLayout::eTransferDstOptimal,
-                    vk::PipelineStageFlagBits2::eNone,
-                    vk::AccessFlagBits2::eNone,
-                    vk::PipelineStageFlagBits2::eNone,
-                    vk::AccessFlagBits2::eNone);
-                merger.flushBarriers(command_buffer);
-
-                uint64_t src_offset = 0;
-                Vulkan::CopyBufferToImageCube(
-                    staging.Handle,
-                    m_SkyboxImage.Handle,
-                    src_offset,
-                    face_size,
-                    vk::Extent2D{m_SkyboxImage.Extent.width, m_SkyboxImage.Extent.height},
-                    command_buffer);
-                src_offset += face_size * 6;
-                Vulkan::CopyBufferToBuffer(
-                    staging.Handle,
-                    m_SkyboxVertexBuffer.Handle,
-                    src_offset, 0,
-                    m_SkyboxVertexBuffer.Size,
-                    command_buffer);
-                src_offset += m_SkyboxVertexBuffer.Size;
-                Vulkan::CopyBufferToBuffer(
-                    staging.Handle,
-                    m_SkyboxIndexBuffer.Handle,
-                    src_offset, 0,
-                    m_SkyboxIndexBuffer.Size,
-                    command_buffer);
-                src_offset += m_SkyboxIndexBuffer.Size;
-
-                merger.putImageBarrier(
-                    m_SkyboxImage.Handle,
-                    vk::ImageLayout::eTransferDstOptimal,
-                    vk::ImageLayout::eShaderReadOnlyOptimal,
-                    vk::PipelineStageFlagBits2::eNone,
-                    vk::AccessFlagBits2::eNone,
-                    vk::PipelineStageFlagBits2::eNone,
-                    vk::AccessFlagBits2::eNone);
-                merger.flushBarriers(command_buffer);
-            });
-
-            Vulkan::DestroyBuffer(staging);
-        }
-
-        generateBRDFLUTMap();
-        generatePrefilterMap();
-        generateIrradianceMap();
 
         Vulkan::DescriptorSetWriter()
             .writeCombinedImageSampler(0, m_SkyboxImageView, vk::ImageLayout::eShaderReadOnlyOptimal, m_Sampler)

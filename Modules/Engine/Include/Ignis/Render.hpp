@@ -94,10 +94,10 @@ namespace Ignis {
         struct SpotLight {
             glm::vec3 Position{0.0f};
             glm::f32  Power{1.0f};
-            glm::vec3 Direction{0.0f, 0.0f, 1.0f};
-            glm::f32  CutOff{glm::radians(12.5f)};
+            glm::vec3 Direction{0.0f, 0.0f, 0.0f};
+            glm::f32  CutOff{12.5f};
             glm::vec3 Color{0.0f};
-            glm::f32  OuterCutOff{glm::radians(15.0f)};
+            glm::f32  OuterCutOff{15.0f};
         };
 
         struct LightData {
@@ -160,8 +160,23 @@ namespace Ignis {
             glm::vec4 Tangent{0.0f};
         };
 
+        struct DrawPC {
+            glm::mat4x4 ProjectionView;
+
+            glm::vec3 ViewPosition;
+
+            glm::f32 MaxPrefilterMipLevel;
+
+            ModelID Model;
+        };
+
         struct Settings {
-            std::array<std::filesystem::path, 6> SkyboxFacePaths{};
+            std::filesystem::path SkyboxPath{};
+
+            uint32_t SkyboxResolution     = 2048;
+            uint32_t BRDFLUTResolution    = 256;
+            uint32_t PrefilterResolution  = 256;
+            uint32_t IrradianceResulution = 32;
 
             uint32_t MaxBindingCount = 2 << 20;
 
@@ -216,12 +231,13 @@ namespace Ignis {
 
        private:
 #pragma region Skybox
-        void initializeSkybox(const std::array<std::filesystem::path, 6> &skybox_face_paths);
+        void initializeSkybox(const Settings &settings);
         void releaseSkybox();
 
-        void generateBRDFLUTMap();
-        void generatePrefilterMap();
-        void generateIrradianceMap();
+        void generateSkyboxMap(const Settings &settings);
+        void generateBRDFLUTMap(const Settings &settings);
+        void generatePrefilterMap(const Settings &settings);
+        void generateIrradianceMap(const Settings &settings);
 
         void setSkyboxViewport(FrameGraph::ImageID color_image, FrameGraph::ImageID depth_image);
 
@@ -233,6 +249,13 @@ namespace Ignis {
 #pragma region Material
         void initializeMaterials(uint32_t max_binding_count);
         void releaseMaterials();
+
+        void initializeDefaultMaps();
+
+        TextureID addBlackTexture();
+        TextureID addWhiteTexture();
+        TextureID addNormalTexture();
+        TextureID addMetallicRoughnessTexture();
 
         TextureID  addTexture(const Vulkan::Image &image, vk::ImageView view);
         MaterialID addMaterial(const Material &material);
@@ -364,6 +387,11 @@ namespace Ignis {
         vk::DescriptorSetLayout m_MaterialDescriptorLayout = nullptr;
 
         vk::DescriptorSet m_MaterialDescriptorSet = nullptr;
+
+        TextureID m_BlackTexture{k_InvalidTextureID};
+        TextureID m_WhiteTexture{k_InvalidTextureID};
+        TextureID m_NormalTexture{k_InvalidTextureID};
+        TextureID m_MetallicRoughnessTexture{k_InvalidTextureID};
 
         TextureID  m_NextTextureID{k_InvalidTextureID};
         MaterialID m_NextMaterialID{k_InvalidMaterialID};

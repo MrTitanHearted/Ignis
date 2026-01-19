@@ -11,6 +11,55 @@ namespace Ignis {
         s_pInstance->m_Device.destroyImageView(view);
     }
 
+    Vulkan::Image Vulkan::AllocateImageCubeWithMipLevels(
+        const vma::AllocationCreateFlags allocation_flags,
+        const vma::MemoryUsage           memory_usage,
+        const vk::ImageCreateFlagBits    image_flags,
+        const vk::Format                 format,
+        const vk::ImageUsageFlags        usage_flags,
+        const vk::Extent2D              &extent) {
+        DIGNIS_ASSERT(nullptr != s_pInstance, "Ignis::Vulkan is not initialized.");
+
+        const uint32_t mip_level_count = static_cast<uint32_t>(glm::floor(glm::log2(static_cast<glm::f32>(glm::max(extent.width, extent.height))))) + 1;
+
+        vk::ImageCreateInfo image_create_info{};
+        image_create_info
+            .setFlags(image_flags | vk::ImageCreateFlagBits::eCubeCompatible)
+            .setImageType(vk::ImageType::e2D)
+            .setFormat(format)
+            .setExtent(vk::Extent3D{extent, 1})
+            .setArrayLayers(6)
+            .setMipLevels(mip_level_count)
+            .setSamples(vk::SampleCountFlagBits::e1)
+            .setInitialLayout(vk::ImageLayout::eUndefined)
+            .setTiling(vk::ImageTiling::eOptimal)
+            .setUsage(usage_flags);
+        vma::AllocationCreateInfo create_info{};
+        create_info
+            .setFlags(allocation_flags)
+            .setUsage(memory_usage);
+
+        const auto [result, image_allocation] =
+            s_pInstance->m_VmaAllocator.createImage(image_create_info, create_info);
+        DIGNIS_VK_CHECK(result);
+        const auto [handle, allocation] = image_allocation;
+
+        Image image{};
+        image.Handle        = handle;
+        image.Format        = format;
+        image.Extent        = vk::Extent3D{extent, 1};
+        image.Allocation    = allocation;
+        image.Usage         = usage_flags;
+        image.MipLevelCount = mip_level_count;
+
+        image.CreateFlags = image_flags;
+        image.MemoryUsage = memory_usage;
+
+        image.AllocationFlags = allocation_flags;
+
+        return image;
+    }
+
     Vulkan::Image Vulkan::AllocateImageCube(
         const vma::AllocationCreateFlags allocation_flags,
         const vma::MemoryUsage           memory_usage,

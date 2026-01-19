@@ -48,6 +48,8 @@ namespace Ignis {
             .writeCombinedImageSampler(3, m_IrradianceImageView, vk::ImageLayout::eShaderReadOnlyOptimal, m_Sampler)
             .writeStorageBuffer(4, m_MaterialBuffer.Handle, 0, m_MaterialBuffer.Size)
             .update(m_MaterialDescriptorSet);
+
+        initializeDefaultMaps();
     }
 
     void Render::releaseMaterials() {
@@ -69,6 +71,26 @@ namespace Ignis {
         Vulkan::DestroyBuffer(m_MaterialBuffer);
 
         Vulkan::DestroyDescriptorSetLayout(m_MaterialDescriptorLayout);
+    }
+
+    Render::TextureID Render::addBlackTexture() {
+        m_LoadedTextureRCs[m_BlackTexture]++;
+        return m_BlackTexture;
+    }
+
+    Render::TextureID Render::addWhiteTexture() {
+        m_LoadedTextureRCs[m_WhiteTexture]++;
+        return m_WhiteTexture;
+    }
+
+    Render::TextureID Render::addNormalTexture() {
+        m_LoadedTextureRCs[m_NormalTexture]++;
+        return m_NormalTexture;
+    }
+
+    Render::TextureID Render::addMetallicRoughnessTexture() {
+        m_LoadedTextureRCs[m_MetallicRoughnessTexture]++;
+        return m_MetallicRoughnessTexture;
     }
 
     Render::TextureID Render::addTexture(const Vulkan::Image &image, const vk::ImageView view) {

@@ -21,11 +21,21 @@ namespace Ignis {
 
         createViewportImage(engine.getUISystem<ImGuiSystem>(), 1, 1, frame_graph);
 
+        m_Camera = Camera{};
+
+        m_SpotLightCutOff      = 12.5f;
+        m_SpotLightOuterCutOff = 15.0f;
+        m_SpotLightPower       = 1.0f;
+
+        m_SpotLightID = Render::AddSpotLight({});
+
         DIGNIS_LOG_APPLICATION_INFO("Ignis::Editor attached");
     }
 
     Editor::~Editor() {
         Vulkan::WaitDeviceIdle();
+
+        Render::RemoveSpotLight(m_SpotLightID);
 
         Engine &engine = Engine::GetRef();
 
@@ -49,6 +59,7 @@ namespace Ignis {
                 m_Camera.processCameraMovement(Camera::Direction::eWorldDown, static_cast<float>(dt));
             if (Window::IsKeyDown(KeyCode::eE))
                 m_Camera.processCameraMovement(Camera::Direction::eWorldUp, static_cast<float>(dt));
+            updateSpotLight();
         }
 
         const auto width  = static_cast<float>(m_ViewportImage.Extent.width);
@@ -66,6 +77,19 @@ namespace Ignis {
             m_Play = true;
             ImGui_ImplGlfw_RestoreCallbacks(Window::GetHandle());
         }
+
+        ImGui::PushID(1);
+        bool changed = ImGui::DragFloat("CutOff", &m_SpotLightCutOff, 0.001f, 0.0f);
+        changed |= ImGui::DragFloat("OuterCutOff", &m_SpotLightOuterCutOff, 0.001f, 0.0f);
+        changed |= ImGui::DragFloat("Power", &m_SpotLightPower, 0.001f, 0.0f);
+        changed |= ImGui::ColorEdit3("Color", glm::value_ptr(m_SpotLightColor));
+
+        if (changed) {
+            updateSpotLight();
+        }
+
+        ImGui::PopID();
+
         RenderModelPanel(m_ModelPanel);
         ImGui::End();
 
@@ -185,6 +209,17 @@ namespace Ignis {
         m_ViewportView = nullptr;
     }
 
+    void Editor::updateSpotLight() {
+        Render::SpotLight spot_light{};
+        spot_light.Color       = m_SpotLightColor;
+        spot_light.Direction   = m_Camera.getFront();
+        spot_light.Position    = m_Camera.getPosition();
+        spot_light.Power       = m_SpotLightPower;
+        spot_light.CutOff      = glm::cos(glm::radians(m_SpotLightCutOff));
+        spot_light.OuterCutOff = glm::cos(glm::radians(m_SpotLightOuterCutOff));
+        Render::SetSpotLight(m_SpotLightID, spot_light);
+    }
+
     bool Editor::onKeyEvent(const WindowKeyEvent &event) {
         if (KeyAction::ePress != event.Action)
             return false;
@@ -224,6 +259,7 @@ namespace Ignis {
         m_LastMouseY = event.Y;
 
         m_Camera.processMouseMovement(x_offset, -y_offset);
+        updateSpotLight();
 
         return false;
     }
@@ -232,6 +268,7 @@ namespace Ignis {
         if (!m_Play || CursorMode::eNormal == Window::GetCursorMode())
             return false;
         m_Camera.processMouseScroll(event.YOffset);
+        updateSpotLight();
         return false;
     }
 

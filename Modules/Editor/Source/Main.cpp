@@ -34,23 +34,8 @@ int32_t main(
     engine_settings.WindowSettings.Title = "Ignis::Editor";
     engine_settings.WindowSettings.Icon  = "Assets/Icons/IgnisEditor.png";
 
-    engine_settings.RenderSettings.SkyboxFacePaths = {
-        "Assets/Textures/black_1x1.png",
-        "Assets/Textures/black_1x1.png",
-        "Assets/Textures/black_1x1.png",
-        "Assets/Textures/black_1x1.png",
-        "Assets/Textures/black_1x1.png",
-        "Assets/Textures/black_1x1.png",
-    };
-
-    engine_settings.RenderSettings.SkyboxFacePaths = {
-        "Assets/Cubemaps/skybox_anime_sky/px.png",
-        "Assets/Cubemaps/skybox_anime_sky/nx.png",
-        "Assets/Cubemaps/skybox_anime_sky/py.png",
-        "Assets/Cubemaps/skybox_anime_sky/ny.png",
-        "Assets/Cubemaps/skybox_anime_sky/pz.png",
-        "Assets/Cubemaps/skybox_anime_sky/nz.png",
-    };
+    engine_settings.RenderSettings.SkyboxPath = "Assets/Textures/black_1x1.png";
+    engine_settings.RenderSettings.SkyboxPath = "Assets/Textures/brown_photostudio_02_4k.hdr";
 
     engine_settings.UISystem = std::make_unique<Ignis::ImGuiSystem>();
 

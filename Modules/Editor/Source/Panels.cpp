@@ -2,7 +2,8 @@
 
 namespace Ignis {
     void Editor::RenderModelPanel(ModelPanelState &state) {
-        std::vector<Render::ModelID>                                         models_to_remove{};
+        std::vector<Render::ModelID> models_to_remove{};
+
         gtl::flat_hash_map<Render::ModelID, std::vector<Render::InstanceID>> instances_to_remove{};
 
         if (ImGui::CollapsingHeader("Model", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -176,6 +177,7 @@ namespace Ignis {
             ImGui::PopID();
         }
 
+        ImGui::PushID(1);
         // Point Lights
         if (ImGui::CollapsingHeader("Point Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
             // Add Point Light
@@ -233,7 +235,9 @@ namespace Ignis {
                 }
             }
         }
+        ImGui::PopID();
 
+        ImGui::PushID(2);
         // Spot Lights
         if (ImGui::CollapsingHeader("Spot Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
             // Add Spot Light
@@ -250,7 +254,11 @@ namespace Ignis {
                 ImGui::ColorEdit3("Color", glm::value_ptr(add_light.Color));
 
                 if (ImGui::Button("Add", ImVec2(-1, 0))) {
-                    const auto spot_light = Render::AddSpotLight(add_light);
+                    Render::SpotLight sp_light = add_light;
+                    sp_light.CutOff            = glm::cos(glm::radians(add_light.CutOff));
+                    sp_light.OuterCutOff       = glm::cos(glm::radians(add_light.OuterCutOff));
+
+                    const auto spot_light = Render::AddSpotLight(sp_light);
                     state.SpotLights.push_back(spot_light);
                     state.SpotLightValues[spot_light] = add_light;
                 }
@@ -281,7 +289,12 @@ namespace Ignis {
                             changed |= ImGui::ColorEdit3("Color", glm::value_ptr(light.Color));
 
                             if (changed) {
-                                Render::SetSpotLight(spot_light, light);
+                                Render::SpotLight sp_light = light;
+
+                                sp_light.CutOff      = glm::cos(glm::radians(light.CutOff));
+                                sp_light.OuterCutOff = glm::cos(glm::radians(light.OuterCutOff));
+
+                                Render::SetSpotLight(spot_light, sp_light);
                             }
 
                             if (ImGui::Button("Remove", ImVec2(-1, 0))) {
@@ -297,6 +310,7 @@ namespace Ignis {
                 }
             }
         }
+        ImGui::PopID();
 
         // Remove point lights
         while (!point_lights_to_remove.empty()) {

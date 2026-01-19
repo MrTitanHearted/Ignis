@@ -68,12 +68,16 @@ float2 IntegrateBRDF(float n_dot_v, float roughness) {
         float v_dot_h = saturate(dot(V, H));
 
         if (n_dot_l > 0.0f) {
-            float G = CalculateGeometrySmith(N, V, L, roughness);
-            float G_vis = (G * v_dot_h) / (n_dot_h * n_dot_v);
-            float Fc    = pow(1.0f - v_dot_h, 5.0f);
+            float Fc = pow(1.0f - v_dot_h, 5.0f);
 
-            A += (1.0f - Fc) * G_vis;
-            B += Fc * G_vis;
+            float g_n_dot_l = saturate(dot(N, L));
+            float g_n_dot_v = saturate(dot(N, V));
+
+            float G = CalculateGeometrySmith(g_n_dot_l, g_n_dot_v, roughness);
+            G *= v_dot_h / (n_dot_h * n_dot_v);
+
+            A += (1.0f - Fc) * G;
+            B += Fc * G;
         }
     }
 
@@ -82,10 +86,14 @@ float2 IntegrateBRDF(float n_dot_v, float roughness) {
     return float2(A, B);
 }
 
-float CalculateGeometrySmith(float3 N, float3 V, float3 L, float roughness) {
-    float n_dot_l = max(dot(N, L), 0.0f);
-    float n_dot_v = max(dot(N, V), 0.0f);
+float CalculateGeometryVSmithGGXCorrelated(float n_dot_l, float n_dot_v, float roughness) {
+    float a2   = roughness * roughness * roughness * roughness;
+    float ggxl = n_dot_l * sqrt(n_dot_v * n_dot_v * (1.0f - a2) + a2);
+    float ggxv = n_dot_v * sqrt(n_dot_l * n_dot_l * (1.0f - a2) + a2);
+    return 0.5f / (ggxl + ggxv);
+}
 
+float CalculateGeometrySmith(float n_dot_l, float n_dot_v, float roughness) {
     float schlick_light = CalculateGeometrySchlickGGX(n_dot_l, roughness);
     float schlick_view  = CalculateGeometrySchlickGGX(n_dot_v, roughness);
 
@@ -96,9 +104,10 @@ float CalculateGeometrySchlickGGX(float dot_product, float roughness) {
     float r = roughness;
     float k = r * r / 2.0f;
 
+    float nominator   = dot_product;
     float denominator = dot_product * (1.0f - k) + k;
 
-    return dot_product / denominator;
+    return nominator / denominator;
 }
 
 float3 ImportanceSampleGGX(float2 Xi, float3 N, float roughness) {
@@ -131,6 +140,6 @@ float CalculateRadianceInverseVdC(uint bits) {
     bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
     bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
     bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
-    return float(bits) * 2.3283064365386963e-10;  // / 0x100000000
+    return float(bits) * 2.3283064365386963e-10;
 }
 

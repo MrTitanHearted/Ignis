@@ -76,12 +76,13 @@ namespace Ignis {
             vk::SamplerCreateInfo()
                 .setMinLod(0.0f)
                 .setMaxLod(vk::LodClampNone)
+                .setMipmapMode(vk::SamplerMipmapMode::eLinear)
                 .setAnisotropyEnable(vk::True)
                 .setMaxAnisotropy(16.0f));
 
         m_Camera = Camera{glm::mat4x4{1.0f}, glm::mat4x4{1.0f}, glm::vec3{0.0f}};
 
-        initializeSkybox(settings.SkyboxFacePaths);
+        initializeSkybox(settings);
         initializeMaterials(settings.MaxBindingCount);
         initializeLights();
         initializeModels(settings.MaxBindingCount);

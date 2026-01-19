@@ -38,8 +38,13 @@ const static float3 gCubeVertices[36] =
 [[vk::binding(0, 0)]]
 SamplerCube gSkybox;
 
+struct PushConstant {
+    float Roughness;
+    float SkyboxResolution;
+};
+
 [[vk::push_constant]]
-float gRoughness;
+PushConstant gPC;
 
 [shader("vertex")]
 VertexOutput vs_main(
@@ -89,12 +94,25 @@ float4 fs_main([[vk::location(0)]] float3 uvw) : SV_Target {
 
     for (uint i = 0; i < SAMPLE_COUNT; i++) {
         float2 Xi = CalculateHammersley(i, SAMPLE_COUNT);
-        float3 H  = ImportanceSampleGGX(Xi, N, gRoughness);
+        float3 H  = ImportanceSampleGGX(Xi, N, gPC.Roughness);
         float3 L  = normalize(2.0f * dot(V, H) * H - V);
 
-        float n_dot_l = max(dot(N, L), 0.0f);
+        float n_dot_l = saturate(dot(N, L));
         if (n_dot_l > 0.0f) {
-            prefilter_color += gSkybox.Sample(L).rgb * n_dot_l;
+            float n_dot_h = saturate(dot(N, H));
+            float h_dot_v = saturate(dot(H, V));
+
+            float D   = CalculateDistributionGGX(n_dot_h, gPC.Roughness);
+            float pdf = D * n_dot_h / (4.0f * h_dot_v + 0.0001f);
+
+            float resolution = gPC.SkyboxResolution;
+
+            float omega_s = 1.0f / (float(SAMPLE_COUNT) * pdf);
+            float omega_p = 4.0f * k_PI / (6.0f * resolution * resolution);
+
+            float mip_level = 0.0f == gPC.Roughness ? 0.0f : 0.5f * log2(omega_s / omega_p);
+
+            prefilter_color += gSkybox.SampleLevel(L, mip_level).rgb * n_dot_l;
             total_weight += n_dot_l;
         }
     }
@@ -102,6 +120,17 @@ float4 fs_main([[vk::location(0)]] float3 uvw) : SV_Target {
     prefilter_color = prefilter_color / total_weight;
 
     return float4(prefilter_color, 1.0f);
+}
+
+float CalculateDistributionGGX(float n_dot_h, float roughness) {
+    float a  = roughness * roughness;
+    float a2 = a * a;
+
+    float nominator   = a2;
+    float denominator = n_dot_h * n_dot_h * (a2 - 1.0f) + 1.0f;
+    denominator       = k_PI * denominator * denominator;
+
+    return nominator / denominator;
 }
 
 float3 ImportanceSampleGGX(float2 Xi, float3 N, float roughness) {
@@ -116,7 +145,7 @@ float3 ImportanceSampleGGX(float2 Xi, float3 N, float roughness) {
     H.y = sin(phi) * sin_theta;
     H.z = cos_theta;
 
-    float3 up        = abs(N.z) < 0.999999f ? float3(0.0f, 0.0f, 1.0f) : float3(1.0f, 0.0f, 0.0f);
+    float3 up        = abs(N.z) < 0.999f ? float3(0.0f, 0.0f, 1.0f) : float3(1.0f, 0.0f, 0.0f);
     float3 tangent   = normalize(cross(up, N));
     float3 bitangent = cross(N, tangent);
 
@@ -136,3 +165,4 @@ float CalculateRadianceInverseVdC(uint bits) {
     bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
     return float(bits) * 2.3283064365386963e-10;  // / 0x100000000
 }
+
