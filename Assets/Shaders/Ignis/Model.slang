@@ -254,7 +254,8 @@ float4 fs_main(FragmentInput input) : SV_Target {
 
     float2 brdf = gBRDFLUTTexture.Sample(float2(n_dot_v, material_roughness)).rg;
 
-    float3 f0                  = GetF0Metallic(material_albedo, material_metallic);
+    float3 f0 = GetF0Metallic(material_albedo, material_metallic);
+
     float3 base_diffuse_color  = lerp(material_albedo, float3(0.0f), material_metallic);
     float3 base_specular_color = lerp(f0, material_albedo, material_metallic);
 
@@ -382,7 +383,7 @@ float4 fs_main(FragmentInput input) : SV_Target {
         float  ems         = 1.0f - (pbr_state.BRDFScale + pbr_state.BRDFBias);
         float3 f_average   = pbr_state.Reflectance0 + (1.0f - pbr_state.Reflectance0) / 21.0f;
         float3 fms_ems     = f_average * ems * pbr_state.FssEss / (1.0f - f_average * ems);
-        float3 k_d         = pbr_state.BaseDiffuseColor * (1.0f - pbr_state.FssEss + fms_ems);
+        float3 k_d         = pbr_state.BaseDiffuseColor * (1.0f - pbr_state.FssEss - fms_ems);
         float3 diffuse_ibl = (fms_ems + k_d) * irradiance;
 
         float3 ibl = diffuse_ibl + specular_ibl;

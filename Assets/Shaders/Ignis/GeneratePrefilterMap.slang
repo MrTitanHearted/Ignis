@@ -100,17 +100,17 @@ float4 fs_main([[vk::location(0)]] float3 uvw) : SV_Target {
         float n_dot_l = saturate(dot(N, L));
         if (n_dot_l > 0.0f) {
             float n_dot_h = saturate(dot(N, H));
-            float h_dot_v = saturate(dot(H, V));
+            float v_dot_h = saturate(dot(V, H));
 
             float D   = CalculateDistributionGGX(n_dot_h, gPC.Roughness);
-            float pdf = D * n_dot_h / (4.0f * h_dot_v + 0.0001f);
+            float pdf = D * n_dot_h / (4.0f * v_dot_h) + 0.0001f;
 
             float resolution = gPC.SkyboxResolution;
 
             float omega_s = 1.0f / (float(SAMPLE_COUNT) * pdf);
             float omega_p = 4.0f * k_PI / (6.0f * resolution * resolution);
 
-            float mip_level = 0.0f == gPC.Roughness ? 0.0f : 0.5f * log2(omega_s / omega_p);
+            float mip_level = 0.0f == gPC.Roughness ? (0.0f) : (0.5f * log2(omega_s / omega_p));
 
             prefilter_color += gSkybox.SampleLevel(L, mip_level).rgb * n_dot_l;
             total_weight += n_dot_l;

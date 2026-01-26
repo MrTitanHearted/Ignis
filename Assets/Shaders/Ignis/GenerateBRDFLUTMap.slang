@@ -40,9 +40,8 @@ VertexOutput vs_main(uint vertex_id: SV_VertexID) {
 }
 
 [shader("fragment")]
-float4 fs_main([[vk::location(0)]] float2 uv) : SV_Target {
-    float2 integrated_brdf = IntegrateBRDF(uv.x, uv.y);
-    return float4(integrated_brdf, 0.0f, 1.0f);
+float2 fs_main([[vk::location(0)]] float2 uv) : SV_Target {
+    return IntegrateBRDF(uv.x, uv.y);
 }
 
 float2 IntegrateBRDF(float n_dot_v, float roughness) {
@@ -68,13 +67,8 @@ float2 IntegrateBRDF(float n_dot_v, float roughness) {
         float v_dot_h = saturate(dot(V, H));
 
         if (n_dot_l > 0.0f) {
+            float G = CalculateGeometrySmith(n_dot_l, n_dot_v, roughness) * v_dot_h / (n_dot_h * n_dot_v);
             float Fc = pow(1.0f - v_dot_h, 5.0f);
-
-            float g_n_dot_l = saturate(dot(N, L));
-            float g_n_dot_v = saturate(dot(N, V));
-
-            float G = CalculateGeometrySmith(g_n_dot_l, g_n_dot_v, roughness);
-            G *= v_dot_h / (n_dot_h * n_dot_v);
 
             A += (1.0f - Fc) * G;
             B += Fc * G;

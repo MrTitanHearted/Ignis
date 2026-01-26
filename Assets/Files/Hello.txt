@@ -1,0 +1,47 @@
+RDP bug report
+==========================================
+Description
+(fill me in)
+
+==========================================
+Steps to Reproduce
+1. (fill me in)
+2.
+...
+
+==========================================
+Enabled Features
+
+Profiling
+
+==========================================
+Host System Information
+
+RDP Version: Radeon Developer Panel v3.4.1.8
+RDP build Date: 12/04/2025
+
+Operating System: Nobara Linux 43 (KDE Plasma Desktop Edition)
+Qt Version: 6.7.0
+
+Tool Version:
+Router Version 0.13.0
+
+==========================================
+Connected System Information
+
+Driver Version:
+GPUOpen Interface Major Version: 42
+
+Operating System Name: Nobara Linux
+Operating System Description: Linux 6.18.6-200.nobara.fc43.x86_64 x86_64     #1 SMP PREEMPT_DYNAMIC Sun Jan 18 17:19:58 UTC 2026
+
+GPUs:
+******************************************
+Name: AMD Radeon Graphics
+
+ASIC info
+************
+Device Id: 15E7
+Revision: C4
+Family: 8E
+gfx_engine: 0

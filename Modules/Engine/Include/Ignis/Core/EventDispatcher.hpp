@@ -65,7 +65,7 @@ namespace Ignis {
         void addListener(
             fu2::function<bool(const TEvent &)> callback,
             const std::type_index               listener_id) {
-            const std::type_index event_type = typeid(TEvent);
+                const std::type_index event_type = typeid(TEvent);
 
             DIGNIS_ASSERT(
                 !m_ListenerLookUp.contains(listener_id),

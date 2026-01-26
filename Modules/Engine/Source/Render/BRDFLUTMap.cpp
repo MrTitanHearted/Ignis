@@ -16,7 +16,7 @@ namespace Ignis {
 
         m_BRDFLUTImage = Vulkan::AllocateImage2D(
             {}, vma::MemoryUsage::eGpuOnly, {},
-            vk::Format::eR16G16B16A16Sfloat,
+            vk::Format::eR16G16Sfloat,
             vk::ImageUsageFlagBits::eColorAttachment |
                 vk::ImageUsageFlagBits::eSampled,
             {gImageSize, gImageSize});
